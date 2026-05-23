@@ -1,12 +1,24 @@
 """FastAPI entrypoint."""
 
-from fastapi import FastAPI, HTTPException, status
-from fastapi.responses import StreamingResponse
+import logging
+from uuid import uuid4
 
-from app.core.config import settings
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
+
+from app.core.config import get_settings
+from app.core.exceptions import (
+    LLMRateLimitError,
+    LLMServiceError,
+    LLMTemporaryError,
+    LLMTimeoutError,
+)
 from app.core.logging_config import setup_logging
 from app.schemas.ask import AskRequest, AskResponse
 from app.schemas.tasks import (
+    AnalyzeTextRequest,
+    AnalyzeTextResponse,
     ClassifyRequest,
     ClassifyResponse,
     ExtractKeywordsRequest,
@@ -17,7 +29,7 @@ from app.schemas.tasks import (
     TranslateResponse,
 )
 from app.services.openai_service import (
-    OpenAIError,
+    analyze_text,
     ask_openai,
     ask_openai_stream,
     classify_text,
@@ -26,17 +38,63 @@ from app.services.openai_service import (
     translate_text,
 )
 
-app = FastAPI(title="AI Backend", version="1.0.0")
 setup_logging()
+logger = logging.getLogger(__name__)
+app = FastAPI(title="AI Backend", version="2.0.0")
 
 
-def _ensure_api_key() -> None:
-    """Fail early when API key is missing."""
-    if not settings.OPENAI_API_KEY:
+@app.on_event("startup")
+async def validate_settings_on_startup() -> None:
+    """
+    Validate environment configuration during startup.
+
+    This fails fast when OPENAI_API_KEY is missing, instead of failing on first request.
+    """
+    try:
+        get_settings()
+    except ValidationError as exc:
+        logger.error("startup_config_error error=%s", str(exc))
+        raise RuntimeError(
+            "Invalid configuration. Ensure OPENAI_API_KEY is set in .env."
+        ) from exc
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """Attach a request id so logs can be correlated across layers."""
+    request_id = request.headers.get("x-request-id") or str(uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["x-request-id"] = request_id
+    return response
+
+
+def _raise_http_error_from_service(exc: Exception) -> None:
+    """Map service-layer exceptions into clean API responses."""
+    if isinstance(exc, LLMTimeoutError):
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="OPENAI_API_KEY is not set. Add it to your .env file.",
-        )
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=str(exc),
+        ) from exc
+    if isinstance(exc, LLMRateLimitError):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+        ) from exc
+    if isinstance(exc, LLMTemporaryError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    if isinstance(exc, LLMServiceError):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Unexpected server error.",
+    ) from exc
 
 
 @app.get("/health")
@@ -46,127 +104,76 @@ async def health_check() -> dict:
 
 
 @app.post("/ask", response_model=AskResponse)
-async def ask_question(payload: AskRequest) -> AskResponse:
-    """
-    Accepts a question and returns an AI answer.
-    This endpoint is async to support non-blocking I/O with OpenAI.
-    """
-    _ensure_api_key()
-
+async def ask_question(payload: AskRequest, request: Request) -> AskResponse:
+    """Accept a question and return an AI answer."""
     try:
-        return await ask_openai(payload.question)
-    except OpenAIError as exc:
-        # Convert provider-specific failures to API-friendly errors.
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"OpenAI API error: {exc}",
-        ) from exc
+        return await ask_openai(payload.question, request.state.request_id)
     except Exception as exc:
-        # Catch unexpected issues to avoid leaking internals.
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unexpected server error: {exc}",
-        ) from exc
+        _raise_http_error_from_service(exc)
 
 
 @app.post("/ask-stream")
-async def ask_stream(payload: AskRequest) -> StreamingResponse:
-    """
-    Streams generated text token-by-token to the client.
-    Useful for chat-like UX where users see output immediately.
-    """
-    _ensure_api_key()
-
+async def ask_stream(payload: AskRequest, request: Request) -> StreamingResponse:
+    """Stream generated text token-by-token to the client."""
     try:
         return StreamingResponse(
-            ask_openai_stream(payload.question),
+            ask_openai_stream(payload.question, request.state.request_id),
             media_type="text/plain; charset=utf-8",
         )
-    except OpenAIError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"OpenAI API error: {exc}",
-        ) from exc
     except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unexpected server error: {exc}",
-        ) from exc
+        _raise_http_error_from_service(exc)
 
 
 @app.post("/classify", response_model=ClassifyResponse)
-async def classify(payload: ClassifyRequest) -> ClassifyResponse:
+async def classify(payload: ClassifyRequest, request: Request) -> ClassifyResponse:
     """Classify user text into sentiment + summary + keywords."""
-    _ensure_api_key()
-
     try:
-        return await classify_text(payload.text)
-    except OpenAIError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"OpenAI API error: {exc}",
-        ) from exc
+        return await classify_text(payload.text, request.state.request_id)
     except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unexpected server error: {exc}",
-        ) from exc
+        _raise_http_error_from_service(exc)
 
 
 @app.post("/summarize", response_model=SummarizeResponse)
-async def summarize(payload: SummarizeRequest) -> SummarizeResponse:
+async def summarize(payload: SummarizeRequest, request: Request) -> SummarizeResponse:
     """Summarize text into a short response."""
-    _ensure_api_key()
-
     try:
-        return await summarize_text(payload.text)
-    except OpenAIError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"OpenAI API error: {exc}",
-        ) from exc
+        return await summarize_text(payload.text, request.state.request_id)
     except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unexpected server error: {exc}",
-        ) from exc
+        _raise_http_error_from_service(exc)
 
 
 @app.post("/extract-keywords", response_model=ExtractKeywordsResponse)
 async def extract_keywords_endpoint(
     payload: ExtractKeywordsRequest,
+    request: Request,
 ) -> ExtractKeywordsResponse:
     """Extract key terms from user text."""
-    _ensure_api_key()
-
     try:
-        return await extract_keywords(payload.text)
-    except OpenAIError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"OpenAI API error: {exc}",
-        ) from exc
+        return await extract_keywords(payload.text, request.state.request_id)
     except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unexpected server error: {exc}",
-        ) from exc
+        _raise_http_error_from_service(exc)
 
 
 @app.post("/translate", response_model=TranslateResponse)
-async def translate(payload: TranslateRequest) -> TranslateResponse:
+async def translate(payload: TranslateRequest, request: Request) -> TranslateResponse:
     """Translate input text to a target language."""
-    _ensure_api_key()
-
     try:
-        return await translate_text(payload.text, payload.target_language)
-    except OpenAIError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"OpenAI API error: {exc}",
-        ) from exc
+        return await translate_text(
+            payload.text,
+            payload.target_language,
+            request.state.request_id,
+        )
     except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unexpected server error: {exc}",
-        ) from exc
+        _raise_http_error_from_service(exc)
+
+
+@app.post("/analyze-text", response_model=AnalyzeTextResponse)
+async def analyze_text_endpoint(
+    payload: AnalyzeTextRequest,
+    request: Request,
+) -> AnalyzeTextResponse:
+    """Combined analysis endpoint for Stage 2."""
+    try:
+        return await analyze_text(payload.text, request.state.request_id)
+    except Exception as exc:
+        _raise_http_error_from_service(exc)

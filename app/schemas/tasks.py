@@ -62,3 +62,21 @@ class TranslateResponse(BaseModel):
     translation: str
     model: str
     tokens_used: int
+
+
+class AnalyzeTextRequest(BaseModel):
+    """Incoming request body for POST /analyze-text."""
+
+    text: str = Field(..., min_length=1, description="Text to analyze")
+
+
+class AnalyzeTextResponse(BaseModel):
+    """Combined NLP response for the analyze endpoint."""
+
+    summary: str
+    sentiment: Literal["positive", "negative", "neutral"]
+    keywords: list[str]
+    language: str
+    model: str
+    tokens_used: int
+    prompt_version: str

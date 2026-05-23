@@ -1,17 +1,20 @@
-# Minimal AI Backend (FastAPI + OpenAI)
+# FastAPI + OpenAI (Stage 2)
 
-Beginner-friendly, production-style FastAPI backend with async OpenAI calls.
+Beginner-friendly AI backend with async OpenAI calls, clean service boundaries, retries, timeouts, and prompt versioning.
 
-## Features
+## Current Features
 
 - `POST /ask` - standard Q&A response
 - `POST /ask-stream` - token streaming response
-- `POST /classify` - strict JSON schema output
+- `POST /classify` - sentiment + summary + keywords (strict JSON schema)
 - `POST /summarize` - concise summary
 - `POST /extract-keywords` - keyword extraction
 - `POST /translate` - translation to target language
-- Logging for prompts/messages, model, token usage, and latency
-- Endpoint-specific system prompts (no single global prompt)
+- `POST /analyze-text` - combined summary/sentiment/keywords/language
+- Startup validation for `OPENAI_API_KEY`
+- Exponential backoff retries for temporary OpenAI failures
+- Friendly timeout and rate-limit errors
+- Structured logging (`request_id`, endpoint, model, latency, tokens, errors)
 
 ## Project Structure
 
@@ -19,20 +22,24 @@ Beginner-friendly, production-style FastAPI backend with async OpenAI calls.
 .
 ├── app/
 │   ├── core/
-│   │   ├── config.py          # Env-based settings
-│   │   └── logging_config.py  # Logging setup
+│   │   ├── config.py            # pydantic-settings config
+│   │   ├── exceptions.py        # service-layer exception types
+│   │   └── logging_config.py
+│   ├── prompts/
+│   │   └── templates.py         # prompt registry + versions (e.g. classify_v1)
 │   ├── schemas/
-│   │   ├── ask.py             # /ask and /ask-stream models
-│   │   └── tasks.py           # classify/summarize/keywords/translate models
+│   │   ├── ask.py
+│   │   └── tasks.py
 │   ├── services/
-│   │   └── openai_service.py  # OpenAI calls + parsing + logging
-│   └── main.py                # FastAPI endpoints
+│   │   ├── openai_client.py     # direct OpenAI SDK wrapper
+│   │   └── openai_service.py    # endpoint workflows and output parsing
+│   └── main.py                  # FastAPI routes
 ├── .env.example
 ├── requirements.txt
 └── README.md
 ```
 
-## 1) Setup
+## Setup
 
 ```bash
 python3 -m venv .venv
@@ -40,22 +47,23 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Create `.env`:
+Create `.env` from `.env.example`:
 
 ```env
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-4o-mini
 OPENAI_TEMPERATURE=0.3
 OPENAI_MAX_TOKENS=300
-OPENAI_SYSTEM_PROMPT_ASK=You are a helpful assistant. Give clear and concise answers.
-OPENAI_SYSTEM_PROMPT_ASK_STREAM=You are a helpful assistant. Stream clear and concise answers.
-OPENAI_SYSTEM_PROMPT_CLASSIFY=You are a precise text classifier. Follow the JSON schema exactly.
-OPENAI_SYSTEM_PROMPT_SUMMARIZE=You summarize text in 2-3 short, clear sentences.
-OPENAI_SYSTEM_PROMPT_EXTRACT_KEYWORDS=You extract the most relevant keywords from text.
-OPENAI_SYSTEM_PROMPT_TRANSLATE=You are a professional translator and return accurate translations.
+OPENAI_TIMEOUT_SECONDS=20
+OPENAI_MAX_RETRIES=2
+OPENAI_RETRY_BASE_DELAY_SECONDS=0.5
 ```
 
-## 2) Run
+> Prompts are no longer loaded from env vars. Prompt text lives in `app/prompts/templates.py` with explicit versions (`ask_v1`, `classify_v1`, `analyze_text_v1`, etc.).
+
+`.env` is git-ignored.
+
+## Run
 
 ```bash
 uvicorn app.main:app --reload
@@ -64,7 +72,13 @@ uvicorn app.main:app --reload
 - API: `http://127.0.0.1:8000`
 - Docs: `http://127.0.0.1:8000/docs`
 
-## 3) Endpoint Examples
+## Curl Examples
+
+### Health
+
+```bash
+curl "http://127.0.0.1:8000/health"
+```
 
 ### Ask
 
@@ -74,9 +88,7 @@ curl -X POST "http://127.0.0.1:8000/ask" \
   -d '{"question":"Explain async/await in Python in simple words."}'
 ```
 
-### Ask Stream (token streaming)
-
-Use `-N` so curl prints chunks as they arrive:
+### Ask Stream
 
 ```bash
 curl -N -X POST "http://127.0.0.1:8000/ask-stream" \
@@ -84,22 +96,12 @@ curl -N -X POST "http://127.0.0.1:8000/ask-stream" \
   -d '{"question":"Write a short paragraph about FastAPI streaming."}'
 ```
 
-### Classify (strict JSON schema)
+### Classify
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/classify" \
   -H "Content-Type: application/json" \
   -d '{"text":"The product is good but shipping was slow."}'
-```
-
-Expected format:
-
-```json
-{
-  "sentiment": "neutral",
-  "summary": "Mixed feedback: positive on product quality, negative on shipping speed.",
-  "keywords": ["product", "shipping", "slow"]
-}
 ```
 
 ### Summarize
@@ -126,45 +128,47 @@ curl -X POST "http://127.0.0.1:8000/translate" \
   -d '{"text":"Good morning, how are you?","target_language":"Spanish"}'
 ```
 
-## 4) How Streaming Works Internally
+### Analyze Text (combined endpoint)
 
-1. `/ask-stream` calls `ask_openai_stream(...)` in `app/services/openai_service.py`.
-2. OpenAI is called with `stream=True`.
-3. The SDK returns chunks incrementally.
-4. The async generator `yield`s each token chunk.
-5. `StreamingResponse` sends chunks to the client immediately.
-6. After stream completion, token usage and latency are logged.
+```bash
+curl -X POST "http://127.0.0.1:8000/analyze-text" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"FastAPI is great for building APIs quickly, but onboarding juniors needs better docs."}'
+```
 
-This gives a faster UX because users see output while generation is still running.
+Expected response shape:
 
-## 5) Where Structured Output Is Configured
+```json
+{
+  "summary": "string",
+  "sentiment": "positive|negative|neutral",
+  "keywords": ["string"],
+  "language": "string",
+  "model": "string",
+  "tokens_used": 123,
+  "prompt_version": "analyze_text_v1"
+}
+```
 
-- JSON schema is defined in `app/services/openai_service.py` as `CLASSIFY_JSON_SCHEMA`.
-- It is passed to OpenAI with:
-  - `response_format={"type": "json_schema", "json_schema": ...}`
-- The returned JSON string is parsed and validated again with Pydantic:
-  - `ClassifyResponse.model_validate(...)`
+## Error Handling (actual behavior)
 
-Using both model-side schema constraints and server-side validation keeps output reliable.
+- Missing/invalid `OPENAI_API_KEY` at startup -> app fails to start
+- Rate limit errors -> `429`
+- Provider timeout -> `504`
+- Temporary provider failures -> `503`
+- Other provider errors -> `502`
+- Invalid input payload -> `422` (FastAPI/Pydantic validation)
+- Unexpected server errors -> `500`
 
-## 6) Logging in AI Systems (Why It Matters)
+## Logging
 
-This project logs:
+The backend logs operational metadata for observability:
 
-- Full messages sent to the model
-- Model name
-- Token usage
-- Latency
+- `request_id` (also returned in `x-request-id` response header)
+- endpoint name
+- model name
+- latency
+- token usage
+- errors
 
-Why this is important:
-
-- Debugging: inspect prompts/messages when output quality drops
-- Cost tracking: token usage directly maps to API cost
-- Performance monitoring: latency helps detect slow requests
-- Reliability: makes incidents easier to investigate in production
-
-## 7) Error Handling
-
-- Missing `OPENAI_API_KEY` -> `500`
-- OpenAI API errors -> `502`
-- Unexpected internal errors -> `500`
+Sensitive data such as `OPENAI_API_KEY` is not logged.
