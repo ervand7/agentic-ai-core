@@ -1,4 +1,4 @@
-# FastAPI + OpenAI (Stage 2)
+# FastAPI + OpenAI
 
 Beginner-friendly AI backend with async OpenAI calls, clean service boundaries, retries, timeouts, and prompt versioning.
 
