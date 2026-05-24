@@ -1,6 +1,6 @@
 # FastAPI + OpenAI
 
-Beginner-friendly AI backend with async OpenAI calls, clean service boundaries, and a minimal semantic search pipeline (embeddings + cosine similarity).
+Production-style AI backend with async OpenAI calls, clean service boundaries, and a minimal semantic search pipeline (embeddings + cosine similarity).
 
 ## Current Features
 
@@ -52,27 +52,6 @@ pip install -r requirements.txt
 ```
 
 Create `.env` from `.env.example`:
-
-```env
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_TEMPERATURE=0.3
-OPENAI_MAX_TOKENS=300
-OPENAI_TIMEOUT_SECONDS=20
-OPENAI_MAX_RETRIES=2
-OPENAI_RETRY_BASE_DELAY_SECONDS=0.5
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-DOCUMENT_CHUNK_SIZE=500
-DOCUMENT_CHUNK_OVERLAP=100
-
-PROMPT_ASK_SYSTEM="You are a helpful assistant. Give clear and concise answers."
-PROMPT_ASK_STREAM_SYSTEM="You are a helpful assistant. Stream clear and concise answers."
-PROMPT_CLASSIFY_SYSTEM="You are a precise sentiment classifier. Return only valid JSON that matches the schema."
-PROMPT_SUMMARIZE_SYSTEM="You summarize text in 2-3 short, clear sentences."
-PROMPT_EXTRACT_KEYWORDS_SYSTEM="Extract the most relevant keywords from the text. Return only valid JSON that matches the schema."
-PROMPT_TRANSLATE_SYSTEM="You are a professional translator. Return only the translated text without extra commentary."
-PROMPT_ANALYZE_TEXT_SYSTEM="You are an NLP assistant. Analyze user text and return valid JSON. Include summary, sentiment (positive|negative|neutral), keywords list, and detected language."
-```
 
 Notes:
 
