@@ -45,14 +45,6 @@ def chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
 def cosine_similarity(vector_a: list[float], vector_b: list[float]) -> float:
     """
     Compute cosine similarity manually (no black-box similarity library).
-
-    Mathematical idea:
-    cos(theta) = (A . B) / (||A|| * ||B||)
-
-    - A . B is the dot product (sum of pairwise multiplications)
-    - ||A|| is the Euclidean norm (square root of sum of squares)
-    - Result range is [-1, 1], where values closer to 1 mean vectors point
-      in nearly the same direction, which usually means similar semantic meaning.
     """
     if len(vector_a) != len(vector_b):
         raise ValueError("Vectors must have the same dimension")
