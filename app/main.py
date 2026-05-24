@@ -1,20 +1,30 @@
-"""FastAPI entrypoint."""
-
 import logging
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from app.core.config import get_settings
-from app.core.logging_config import setup_logging
-from app.routers.ai import router as ai_router
-from app.routers.documents import router as documents_router
+from app.domains.ai_tasks.api.router import router as ai_tasks_router
+from app.domains.documents.api.router import router as documents_router
+from app.domains.documents.application.services import (
+    DocumentValidationError,
+    EmptyVectorStoreError,
+)
+from app.shared.config import get_settings
+from app.shared.exceptions import (
+    LLMRateLimitError,
+    LLMServiceError,
+    LLMTemporaryError,
+    LLMTimeoutError,
+)
+from app.shared.logging import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
 app = FastAPI(title="AI Backend", version="3.0.0")
-app.include_router(ai_router)
+app.include_router(ai_tasks_router)
 app.include_router(documents_router)
 
 
@@ -43,3 +53,54 @@ async def request_id_middleware(request: Request, call_next):
     response.headers["x-request-id"] = request_id
     return response
 
+
+@app.exception_handler(LLMTimeoutError)
+async def _handle_llm_timeout(_: Request, exc: LLMTimeoutError) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+        content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(LLMRateLimitError)
+async def _handle_llm_rate_limit(_: Request, exc: LLMRateLimitError) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(LLMTemporaryError)
+async def _handle_llm_temporary(_: Request, exc: LLMTemporaryError) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(LLMServiceError)
+async def _handle_llm_service(_: Request, exc: LLMServiceError) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(DocumentValidationError)
+async def _handle_document_validation(
+        _: Request, exc: DocumentValidationError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(EmptyVectorStoreError)
+async def _handle_empty_vector_store(
+        _: Request, exc: EmptyVectorStoreError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": str(exc)},
+    )
