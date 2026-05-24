@@ -188,6 +188,60 @@ class OpenAIClient:
             except OpenAIError as exc:
                 raise LLMServiceError("AI provider returned an unexpected error.") from exc
 
+    async def create_embedding(
+        self,
+        *,
+        endpoint: str,
+        request_id: str,
+        text: str,
+        model: Optional[str] = None,
+    ) -> list[float]:
+        """Generate one embedding vector with retries and friendly errors."""
+        max_retries = self.settings.OPENAI_MAX_RETRIES
+        base_delay = self.settings.OPENAI_RETRY_BASE_DELAY_SECONDS
+        start_time = time.perf_counter()
+
+        for attempt in range(max_retries + 1):
+            try:
+                response = await self.client.embeddings.create(
+                    model=model or self.settings.OPENAI_EMBEDDING_MODEL,
+                    input=text,
+                )
+                latency_ms = (time.perf_counter() - start_time) * 1000
+                vector = response.data[0].embedding
+                logger.info(
+                    "openai_embedding_success request_id=%s endpoint=%s model=%s latency_ms=%.2f vector_size=%s",
+                    request_id,
+                    endpoint,
+                    model or self.settings.OPENAI_EMBEDDING_MODEL,
+                    latency_ms,
+                    len(vector),
+                )
+                return vector
+            except APITimeoutError as exc:
+                if attempt < max_retries:
+                    await self._retry_sleep(attempt, base_delay, request_id, endpoint, exc)
+                    continue
+                raise LLMTimeoutError(
+                    "The AI provider timed out. Please try again shortly."
+                ) from exc
+            except RateLimitError as exc:
+                if attempt < max_retries:
+                    await self._retry_sleep(attempt, base_delay, request_id, endpoint, exc)
+                    continue
+                raise LLMRateLimitError(
+                    "Rate limit reached. Please wait a moment and retry."
+                ) from exc
+            except (APIConnectionError, InternalServerError) as exc:
+                if attempt < max_retries:
+                    await self._retry_sleep(attempt, base_delay, request_id, endpoint, exc)
+                    continue
+                raise LLMTemporaryError(
+                    "Temporary AI provider issue. Please retry shortly."
+                ) from exc
+            except OpenAIError as exc:
+                raise LLMServiceError("AI provider returned an unexpected error.") from exc
+
     async def _retry_sleep(
         self,
         attempt: int,

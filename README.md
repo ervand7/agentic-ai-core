@@ -1,43 +1,47 @@
 # FastAPI + OpenAI
 
-Beginner-friendly AI backend with async OpenAI calls, clean service boundaries, retries, timeouts, and prompt versioning.
+Beginner-friendly AI backend with async OpenAI calls, clean service boundaries, and a minimal semantic search pipeline (embeddings + cosine similarity).
 
 ## Current Features
 
-- `POST /ask` - standard Q&A response
-- `POST /ask-stream` - token streaming response
-- `POST /classify` - sentiment + summary + keywords (strict JSON schema)
-- `POST /summarize` - concise summary
-- `POST /extract-keywords` - keyword extraction
-- `POST /translate` - translation to target language
-- `POST /analyze-text` - combined summary/sentiment/keywords/language
-- Startup validation for `OPENAI_API_KEY`
-- Exponential backoff retries for temporary OpenAI failures
-- Friendly timeout and rate-limit errors
-- Structured logging (`request_id`, endpoint, model, latency, tokens, errors)
+### Core AI endpoints
 
-## Project Structure
+- `GET /health`
+- `POST /ask`
+- `POST /ask-stream`
+- `POST /classify`
+- `POST /summarize`
+- `POST /extract-keywords`
+- `POST /translate`
+- `POST /analyze-text`
 
-```text
-.
-├── app/
-│   ├── core/
-│   │   ├── config.py            # pydantic-settings config
-│   │   ├── exceptions.py        # service-layer exception types
-│   │   └── logging_config.py
-│   ├── prompts/
-│   │   └── templates.py         # prompt registry + versions (e.g. classify_v1)
-│   ├── schemas/
-│   │   ├── ask.py
-│   │   └── tasks.py
-│   ├── services/
-│   │   ├── openai_client.py     # direct OpenAI SDK wrapper
-│   │   └── openai_service.py    # endpoint workflows and output parsing
-│   └── main.py                  # FastAPI routes
-├── .env.example
-├── requirements.txt
-└── README.md
-```
+### Semantic search endpoints
+
+- `POST /documents/upload` (upload `.txt`, chunk text, embed chunks, store in memory)
+- `POST /documents/search` (embed query, cosine similarity over stored chunk vectors)
+
+### Operational features
+
+- Startup validation for required settings (`OPENAI_API_KEY`)
+- Retries with exponential backoff for transient OpenAI errors
+- Friendly provider error mapping (`429`, `503`, `504`, `502`)
+- Structured logging with `request_id`
+
+## Semantic Search Concepts
+
+### What are embeddings?
+
+Embeddings are numeric vectors that represent text meaning.  
+Texts with similar meaning are mapped to nearby directions in vector space.
+
+### What is cosine similarity?
+
+Higher values (closer to `1`) mean stronger semantic similarity.
+
+### Why chunking with overlap?
+
+Long documents are split into smaller chunks before embedding.  
+Overlap preserves context at chunk boundaries so meaning is less likely to be lost.
 
 ## Setup
 
@@ -57,11 +61,16 @@ OPENAI_MAX_TOKENS=300
 OPENAI_TIMEOUT_SECONDS=20
 OPENAI_MAX_RETRIES=2
 OPENAI_RETRY_BASE_DELAY_SECONDS=0.5
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+DOCUMENT_CHUNK_SIZE=500
+DOCUMENT_CHUNK_OVERLAP=100
 ```
 
-> Prompts are no longer loaded from env vars. Prompt text lives in `app/prompts/templates.py` with explicit versions (`ask_v1`, `classify_v1`, `analyze_text_v1`, etc.).
+Notes:
 
-`.env` is git-ignored.
+- `python-multipart` is required for file uploads and is included in `requirements.txt`.
+- Prompt texts and versions live in `app/prompts/templates.py`.
+- `.env` is git-ignored.
 
 ## Run
 
@@ -136,39 +145,76 @@ curl -X POST "http://127.0.0.1:8000/analyze-text" \
   -d '{"text":"FastAPI is great for building APIs quickly, but onboarding juniors needs better docs."}'
 ```
 
-Expected response shape:
+### Upload document
+
+```bash
+curl -X POST "http://127.0.0.1:8000/documents/upload" \
+  -F "file=@./sample.txt"
+```
+
+Example response:
 
 ```json
 {
-  "summary": "string",
-  "sentiment": "positive|negative|neutral",
-  "keywords": ["string"],
-  "language": "string",
-  "model": "string",
-  "tokens_used": 123,
-  "prompt_version": "analyze_text_v1"
+  "filename": "sample.txt",
+  "chunks_stored": 4,
+  "total_characters": 1672
 }
 ```
 
-## Error Handling (actual behavior)
+### Semantic search
 
-- Missing/invalid `OPENAI_API_KEY` at startup -> app fails to start
+```bash
+curl -X POST "http://127.0.0.1:8000/documents/search" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"How does retry logic work?","top_k":3}'
+```
+
+Example response:
+
+```json
+{
+  "query": "How does retry logic work?",
+  "results": [
+    {
+      "text": "Retries use exponential backoff to reduce pressure...",
+      "similarity": 0.9241
+    },
+    {
+      "text": "Timeout handling returns a friendly API message...",
+      "similarity": 0.8819
+    }
+  ]
+}
+```
+
+## Error Handling
+
+- Missing/invalid required settings at startup -> app fails fast
 - Rate limit errors -> `429`
 - Provider timeout -> `504`
 - Temporary provider failures -> `503`
 - Other provider errors -> `502`
-- Invalid input payload -> `422` (FastAPI/Pydantic validation)
+- Invalid input payload -> `422`
 - Unexpected server errors -> `500`
 
 ## Logging
 
-The backend logs operational metadata for observability:
+The backend logs:
 
-- `request_id` (also returned in `x-request-id` response header)
+- `request_id` (returned in `x-request-id`)
 - endpoint name
 - model name
 - latency
 - token usage
+- chunk counts for uploads
+- similarity scores and search latency
 - errors
 
-Sensitive data such as `OPENAI_API_KEY` is not logged.
+Sensitive values such as `OPENAI_API_KEY` are not logged.
+
+## Limitations (Current Stage)
+
+- Vector storage is in-memory only (data is lost on restart)
+- Upload supports `.txt` only
+- No database/vector DB yet
