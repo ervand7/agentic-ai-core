@@ -5,7 +5,7 @@ Application services depend on these protocols so the domain stays
 free of HTTP, database, or provider-specific code.
 """
 
-from typing import Protocol
+from typing import Optional, Protocol
 
 from app.domains.documents.domain.models import SearchHit, StoredChunk
 
@@ -32,6 +32,9 @@ class VectorStore(Protocol):
         self,
         query_embedding: list[float],
         top_k: int,
+        filename_filter: Optional[str] = None,
+        keyword: Optional[str] = None,
+        min_similarity: Optional[float] = None,
     ) -> list[SearchHit]:
         """Return the top_k chunks most similar to the query embedding."""
 

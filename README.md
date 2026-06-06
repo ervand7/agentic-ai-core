@@ -1,6 +1,6 @@
 # FastAPI + OpenAI
 
-Production-style AI backend with async OpenAI calls, clean service boundaries, and a minimal semantic search pipeline (embeddings + cosine similarity).
+Production-style AI backend with async OpenAI calls, clean service boundaries, and semantic search powered by Qdrant.
 
 ## Current Features
 
@@ -17,8 +17,8 @@ Production-style AI backend with async OpenAI calls, clean service boundaries, a
 
 ### Semantic search endpoints
 
-- `POST /documents/upload` (upload `.txt`, chunk text, embed chunks, store in memory)
-- `POST /documents/search` (embed query, cosine similarity over stored chunk vectors)
+- `POST /documents/upload` (upload `.txt`, chunk text, embed chunks, store vectors in Qdrant)
+- `POST /documents/search` (embed query and search nearest chunks in Qdrant)
 
 ### Operational features
 
@@ -51,6 +51,12 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Start Qdrant (required for semantic search):
+
+```bash
+docker compose up -d qdrant
+```
+
 Create `.env` from `.env.example`:
 
 Notes:
@@ -67,6 +73,20 @@ uvicorn app.main:app --reload
 
 - API: `http://127.0.0.1:8000`
 - Docs: `http://127.0.0.1:8000/docs`
+
+## Run With Docker (App + Qdrant)
+
+Use one command to start both services:
+
+```bash
+docker compose up --build -d
+```
+
+Stop everything:
+
+```bash
+docker compose down
+```
 
 ## Curl Examples
 
@@ -202,6 +222,5 @@ Sensitive values such as `OPENAI_API_KEY` are not logged.
 
 ## Limitations (Current Stage)
 
-- Vector storage is in-memory only (data is lost on restart)
+- Qdrant must be running for document upload/search
 - Upload supports `.txt` only
-- No database/vector DB yet

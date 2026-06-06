@@ -3,3 +3,4 @@ uvicorn[standard]
 openai
 pydantic-settings
 python-multipart
+qdrant-client

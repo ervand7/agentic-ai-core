@@ -29,8 +29,6 @@ Content-Type: multipart/form-data
 file: coffee.txt
 ```
 
-The body is the raw `.txt` file.
-
 ---
 
 ## What the server does (step by step)
@@ -52,16 +50,11 @@ chunks = [
 ]
 ```
 
-Nothing is persisted yet. This is just a list of strings in process memory.
-
----
-
 ### Step 3 — Embed each chunk via OpenAI
 
 **Request 1 to OpenAI** (simplified):
 
 ```json
-POST https://api.openai.com/v1/embeddings
 {
   "input": "To brew espresso, press the button twice.",
   "model": "text-embedding-3-small"
@@ -106,39 +99,36 @@ OpenAI does **not** store this data for you. It returns the vectors and moves on
 
 ---
 
-### Step 4 — Save into `InMemoryVectorStore`
+### Step 4 — Save into Qdrant (vector DB)
 
-Inside the application (`self._chunks`):
+Inside Qdrant (collection from `QDRANT_COLLECTION_NAME`):
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  InMemoryVectorStore (RAM — one shared instance per process)    │
+│  Qdrant collection (persistent vector database)                 │
 ├─────────────────────────────────────────────────────────────────┤
-│  [0] StoredChunk:                                               │
-│      filename  = "coffee.txt"                                   │
-│      text      = "To brew espresso, press the button twice."    │
-│      embedding = [0.12, 0.85, 0.03, 0.44, ...]                  │
+│  [0] Point:                                                     │
+│      payload.filename = "coffee.txt"                            │
+│      payload.text     = "To brew espresso, press the..."        │
+│      vector           = [0.12, 0.85, 0.03, 0.44, ...]           │
 │                                                                 │
-│  [1] StoredChunk:                                               │
-│      filename  = "coffee.txt"                                   │
-│      text      = "To clean the milk frother, remove the..."     │
-│      embedding = [0.21, 0.88, 0.05, 0.31, ...]                  │
+│  [1] Point:                                                     │
+│      payload.filename = "coffee.txt"                            │
+│      payload.text     = "To clean the milk frother, remove..."  │
+│      vector           = [0.21, 0.88, 0.05, 0.31, ...]           │
 │                                                                 │
-│  [2] StoredChunk:                                               │
-│      filename  = "coffee.txt"                                   │
-│      text      = "The device warranty is 2 years."              │
-│      embedding = [0.05, 0.10, 0.92, 0.11, ...]                  │
+│  [2] Point:                                                     │
+│      payload.filename = "coffee.txt"                            │
+│      payload.text     = "The device warranty is 2 years."       │
+│      vector           = [0.05, 0.10, 0.92, 0.11, ...]           │
 └─────────────────────────────────────────────────────────────────┘
 ```
-
-**Saved:** chunk text + its vector + source filename.  
-**Not saved separately:** the original file as a whole — only the chunks.
 
 Relevant code:
 
 - Chunking: `app/domains/documents/domain/chunking.py`
 - Ingest use case: `app/domains/documents/application/services.py` → `IngestDocumentService`
-- Storage: `app/domains/documents/infrastructure/in_memory_vector_store.py`
+- Storage: `app/domains/documents/infrastructure/qdrant_vector_store.py`
 
 ---
 
@@ -170,9 +160,6 @@ Content-Type: application/json
 }
 ```
 
-- `query` — natural-language question
-- `top_k` — how many best-matching chunks to return (default `3`, max `10`)
-
 ---
 
 ## What the server does (step by step)
@@ -185,14 +172,11 @@ store.count()  # → 3  ✅ something to search
 
 If the count is `0`, the API returns an error: *"No documents uploaded yet. Upload a .txt file first."*
 
----
-
 ### Step 2 — Embed the question via OpenAI
 
 **Request to OpenAI:**
 
 ```json
-POST https://api.openai.com/v1/embeddings
 {
   "input": "how do I clean the milk frother",
   "model": "text-embedding-3-small"
@@ -211,21 +195,11 @@ POST https://api.openai.com/v1/embeddings
 
 ---
 
-### Step 3 — Compare locally in `InMemoryVectorStore`
+### Step 3 — Search in Qdrant by vector similarity
 
-Your code loops over **all stored chunks** and scores each one with `cosine_similarity()`:
+Your code sends the query vector to Qdrant (`query_points`), and Qdrant returns the top matching chunks by similarity score:
 
-```
-query_vector = [0.20, 0.87, 0.06, 0.30, ...]
-
-compare with [0] embedding [0.12, 0.85, ...]  → similarity = 0.41
-compare with [1] embedding [0.21, 0.88, ...]  → similarity = 0.94  ← best match
-compare with [2] embedding [0.05, 0.10, ...]  → similarity = 0.18
-```
-
-This is **local math** in `chunking.py`. OpenAI is not involved in this step.
-
-Results are sorted by similarity (highest first). With `top_k=2`:
+Example ranking:
 
 ```
 1. similarity 0.94 → "To clean the milk frother, remove the nozzle..."
@@ -235,7 +209,7 @@ Results are sorted by similarity (highest first). With `top_k=2`:
 Relevant code:
 
 - Search use case: `app/domains/documents/application/services.py` → `SearchDocumentsService`
-- Similarity + ranking: `app/domains/documents/infrastructure/in_memory_vector_store.py`
+- Similarity + ranking: `app/domains/documents/infrastructure/qdrant_vector_store.py`
 
 ---
 

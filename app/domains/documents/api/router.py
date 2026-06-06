@@ -25,7 +25,7 @@ async def upload_document(
     file: UploadFile = File(...),
     service: IngestDocumentService = Depends(get_ingest_document_service),
 ) -> DocumentUploadResponse:
-    """Upload one .txt file, chunk it, embed chunks, and store everything in memory."""
+    """Upload one .txt file, chunk it, embed chunks, and store vectors in Qdrant."""
     if not file.filename or not file.filename.lower().endswith(".txt"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -58,5 +58,8 @@ async def search_documents(
     return await service.execute(
         query=payload.query,
         top_k=payload.top_k,
+        filename=payload.filename,
+        keyword=payload.keyword,
+        min_similarity=payload.min_similarity,
         request_id=request.state.request_id,
     )

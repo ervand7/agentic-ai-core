@@ -7,8 +7,8 @@ from app.domains.documents.application.services import (
     SearchDocumentsService,
 )
 from app.domains.documents.domain.ports import EmbeddingProvider, VectorStore
-from app.domains.documents.infrastructure.in_memory_vector_store import (
-    InMemoryVectorStore,
+from app.domains.documents.infrastructure.qdrant_vector_store import (
+    QdrantVectorStore,
 )
 from app.domains.documents.infrastructure.openai_embedding_provider import (
     OpenAIEmbeddingProvider,
@@ -19,8 +19,12 @@ from app.shared.infrastructure.openai_client import get_openai_client
 
 @lru_cache
 def get_vector_store() -> VectorStore:
-    """Singleton in-memory vector store shared by ingest and search."""
-    return InMemoryVectorStore()
+    """Singleton Qdrant-backed vector store shared by ingest and search."""
+    settings = get_settings()
+    return QdrantVectorStore(
+        url=settings.QDRANT_URL,
+        collection_name=settings.QDRANT_COLLECTION_NAME,
+    )
 
 
 @lru_cache
