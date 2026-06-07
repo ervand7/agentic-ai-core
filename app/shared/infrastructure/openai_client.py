@@ -56,16 +56,10 @@ class OpenAIClient:
         )
 
     def _resolve_temperature(self, temperature: Optional[float]) -> float:
-        return (
-            self.settings.OPENAI_TEMPERATURE
-            if temperature is None
-            else temperature
-        )
+        return self.settings.OPENAI_TEMPERATURE if temperature is None else temperature
 
     def _resolve_max_tokens(self, max_tokens: Optional[int]) -> int:
-        return (
-            self.settings.OPENAI_MAX_TOKENS if max_tokens is None else max_tokens
-        )
+        return self.settings.OPENAI_MAX_TOKENS if max_tokens is None else max_tokens
 
     def _build_non_streaming_params(
         self,
@@ -199,7 +193,9 @@ class OpenAIClient:
                     self.settings.OPENAI_MODEL,
                     str(exc),
                 )
-                raise LLMServiceError("AI provider returned an unexpected error.") from exc
+                raise LLMServiceError(
+                    "AI provider returned an unexpected error."
+                ) from exc
 
         raise LLMServiceError("AI provider returned an unexpected error.")
 
@@ -254,7 +250,9 @@ class OpenAIClient:
                     "Temporary AI provider issue. Please retry shortly."
                 ) from exc
             except OpenAIError as exc:
-                raise LLMServiceError("AI provider returned an unexpected error.") from exc
+                raise LLMServiceError(
+                    "AI provider returned an unexpected error."
+                ) from exc
 
         raise LLMServiceError("AI provider returned an unexpected error.")
 
@@ -320,7 +318,9 @@ class OpenAIClient:
                     "Temporary AI provider issue. Please retry shortly."
                 ) from exc
             except OpenAIError as exc:
-                raise LLMServiceError("AI provider returned an unexpected error.") from exc
+                raise LLMServiceError(
+                    "AI provider returned an unexpected error."
+                ) from exc
 
         raise LLMServiceError("AI provider returned an unexpected error.")
 

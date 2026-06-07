@@ -17,7 +17,9 @@ class DocumentSearchRequest(BaseModel):
     """Incoming request for semantic search."""
 
     query: str = Field(..., min_length=1, description="Natural-language search query")
-    top_k: int = Field(default=3, ge=1, le=10, description="Number of results to return")
+    top_k: int = Field(
+        default=3, ge=1, le=10, description="Number of results to return"
+    )
     filename: Optional[str] = Field(
         default=None,
         description="Optional exact filename filter (metadata filtering).",

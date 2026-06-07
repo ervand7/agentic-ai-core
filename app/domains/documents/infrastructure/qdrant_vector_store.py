@@ -227,7 +227,9 @@ class QdrantVectorStore(VectorStore):
             return False
 
     @staticmethod
-    def _build_filename_filter(filename_filter: Optional[str]) -> Optional[models.Filter]:
+    def _build_filename_filter(
+        filename_filter: Optional[str],
+    ) -> Optional[models.Filter]:
         normalized = (filename_filter or "").strip()
         if not normalized:
             return None
@@ -270,8 +272,7 @@ class QdrantVectorStore(VectorStore):
             return vector_score
         # Weighted blend: semantic similarity dominates, keyword adds lexical signal.
         return (
-            HYBRID_VECTOR_WEIGHT * vector_score
-            + HYBRID_KEYWORD_WEIGHT * keyword_score
+            HYBRID_VECTOR_WEIGHT * vector_score + HYBRID_KEYWORD_WEIGHT * keyword_score
         )
 
     @staticmethod
@@ -282,7 +283,12 @@ class QdrantVectorStore(VectorStore):
         return value if isinstance(value, str) else ""
 
     @staticmethod
-    def _vector_list(vector: Optional[models.VectorStruct]) -> list[float]:
-        if isinstance(vector, list):
+    def _vector_list(vector: object | None) -> list[float]:
+        if not isinstance(vector, list) or not vector:
+            return []
+        first = vector[0]
+        if isinstance(first, (int, float)):
             return [float(value) for value in vector]
+        if isinstance(first, list):
+            return [float(value) for value in first]
         return []

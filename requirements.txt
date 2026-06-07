@@ -6,3 +6,9 @@ pydantic-settings
 python-multipart
 qdrant-client
 pypdf
+
+# Testing (also listed in requirements-dev.txt for explicit dev installs)
+pytest
+pytest-asyncio
+pytest-cov
+pytest-mock

@@ -20,7 +20,10 @@ _CLASSIFY_JSON_SCHEMA: JSONSchema = {
     "schema": {
         "type": "object",
         "properties": {
-            "sentiment": {"type": "string", "enum": ["positive", "negative", "neutral"]},
+            "sentiment": {
+                "type": "string",
+                "enum": ["positive", "negative", "neutral"],
+            },
             "summary": {"type": "string"},
             "keywords": {"type": "array", "items": {"type": "string"}},
         },
@@ -47,7 +50,10 @@ _ANALYZE_TEXT_JSON_SCHEMA: JSONSchema = {
         "type": "object",
         "properties": {
             "summary": {"type": "string"},
-            "sentiment": {"type": "string", "enum": ["positive", "negative", "neutral"]},
+            "sentiment": {
+                "type": "string",
+                "enum": ["positive", "negative", "neutral"],
+            },
             "keywords": {"type": "array", "items": {"type": "string"}},
             "language": {"type": "string"},
         },

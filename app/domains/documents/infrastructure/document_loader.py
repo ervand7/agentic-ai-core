@@ -37,9 +37,7 @@ def extract_text(*, filename: str, raw_bytes: bytes) -> str:
         return _extract_txt(raw_bytes)
     if lowered.endswith(".pdf"):
         return _extract_pdf(raw_bytes)
-    raise UnsupportedDocumentError(
-        "Only .txt and .pdf files are supported for now."
-    )
+    raise UnsupportedDocumentError("Only .txt and .pdf files are supported for now.")
 
 
 def _extract_txt(raw_bytes: bytes) -> str:
