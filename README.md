@@ -1,54 +1,73 @@
-# FastAPI + OpenAI
+# Agentic AI Core
 
-Production-style AI backend with async OpenAI calls, clean service boundaries, and semantic search powered by Qdrant.
+> A production-style AI backend built with **FastAPI** and **OpenAI** — async LLM calls, a clean Domain-Driven design, and a full **RAG pipeline** powered by **Qdrant** vector search. Ships with a built-in web UI, so you can try every feature in your browser.
 
-## Current Features
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-LLM%20%2B%20Embeddings-412991?logo=openai&logoColor=white)
+![Qdrant](https://img.shields.io/badge/Qdrant-vector%20search-DC244C)
+![Docker](https://img.shields.io/badge/Docker-compose-2496ED?logo=docker&logoColor=white)
+![Architecture](https://img.shields.io/badge/Architecture-DDD%20%2B%20Hexagonal-555)
 
-### Core AI endpoints
+---
 
-- `GET /health`
-- `POST /ask`
-- `POST /ask-stream`
-- `POST /classify`
-- `POST /summarize`
-- `POST /extract-keywords`
-- `POST /translate`
-- `POST /analyze-text`
+## Why this project is interesting
 
-### Semantic search endpoints
+- **Two bounded contexts, one clean codebase.** `ai_tasks` (LLM text tools) and `documents` (semantic search + RAG) are fully isolated behind ports & adapters — swap OpenAI or Qdrant without touching domain logic.
+- **A complete RAG pipeline, not a toy.** Upload → chunk (with overlap) → embed → store → retrieve → ground → answer **with citations**, and it **abstains** ("I don't know") when nothing relevant is found.
+- **Hybrid & filtered search.** Combine vector similarity with keyword matching, filter by filename, and enforce a minimum-similarity threshold.
+- **Real-time streaming.** `/ask-stream` returns tokens as they're generated; the web UI renders them live.
+- **Operational maturity.** Startup config validation, retries with exponential backoff, friendly provider-error mapping, and structured logging with a per-request `request_id`.
+- **Batteries-included UI.** A single-page app served at `/` exercises every endpoint — no separate frontend server.
 
-- `POST /documents/upload` (upload `.txt`, chunk text, embed chunks, store vectors in Qdrant)
-- `POST /documents/search` (embed query and search nearest chunks in Qdrant)
+---
 
-### Web UI
+## Feature overview
 
-- A built-in single-page UI that covers every endpoint above
-- Served by the app at `/` (no separate frontend server needed)
+| Area | What you get |
+| --- | --- |
+| **LLM text tools** | Ask, streaming Ask, classify (sentiment), summarize, extract keywords, translate, full text analysis |
+| **Semantic search** | Embed-and-search over uploaded docs, similarity scores, top-K control |
+| **Hybrid search** | Vector + keyword matching, filename filtering, min-similarity threshold |
+| **RAG** | Grounded answers with numbered citations + graceful abstention |
+| **Document ingestion** | `.txt` and text-based `.pdf` upload, chunking with overlap, vector storage |
+| **Web UI** | Built-in single-page app covering every endpoint, live health indicator |
+| **Reliability** | Retries, backoff, timeouts, provider-error → HTTP mapping |
+| **Observability** | Structured logs: request id, model, latency, tokens, similarity, chunk counts |
+| **Configurability** | Per-task temperatures, tunable prompts via env vars, RAG knobs |
 
-### Operational features
+---
 
-- Startup validation for required settings (`OPENAI_API_KEY`)
-- Retries with exponential backoff for transient OpenAI errors
-- Friendly provider error mapping (`429`, `503`, `504`, `502`)
-- Structured logging with `request_id`
+## API reference
 
-## Semantic Search Concepts
+### LLM text tools (`ai_tasks`)
 
-### What are embeddings?
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET`  | `/health` | Liveness check |
+| `POST` | `/ask` | Ask a question, get a single answer |
+| `POST` | `/ask-stream` | Same as `/ask`, streamed token-by-token |
+| `POST` | `/classify` | Sentiment classification (structured JSON) |
+| `POST` | `/summarize` | 2–3 sentence summary |
+| `POST` | `/extract-keywords` | Key terms as structured JSON |
+| `POST` | `/translate` | Translate text to a target language |
+| `POST` | `/analyze-text` | Combined summary + sentiment + keywords + language |
 
-Embeddings are numeric vectors that represent text meaning.  
-Texts with similar meaning are mapped to nearby directions in vector space.
+### Semantic search & RAG (`documents`)
 
-### What is cosine similarity?
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/documents/upload` | Upload `.txt`/`.pdf`, chunk, embed, store in Qdrant |
+| `POST` | `/documents/search` | Vector (+ optional keyword) search with filters |
+| `POST` | `/documents/ask` | RAG answer grounded in your docs, with citations |
 
-Higher values (closer to `1`) mean stronger semantic similarity.
+Interactive OpenAPI docs are available at `/docs`. Ready-to-run `curl` snippets for every endpoint live in [`doc/3. API_CURL_EXAMPLES.md`](doc/3.%20API_CURL_EXAMPLES.md).
 
-### Why chunking with overlap?
+---
 
-Long documents are split into smaller chunks before embedding.  
-Overlap preserves context at chunk boundaries so meaning is less likely to be lost.
+## Quick start
 
-## Setup
+### 1. Install
 
 ```bash
 python3 -m venv .venv
@@ -56,101 +75,78 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Start Qdrant (required for semantic search):
+### 2. Configure
+
+```bash
+cp .env.example .env
+# then set OPENAI_API_KEY in .env
+```
+
+> `.env` is git-ignored. Required settings are validated at startup — the app fails fast if `OPENAI_API_KEY` is missing.
+
+### 3. Start Qdrant (needed for semantic search / RAG)
 
 ```bash
 docker compose up -d qdrant
 ```
 
-Create `.env` from `.env.example`:
-
-Notes:
-
-- `python-multipart` is required for file uploads and is included in `requirements.txt`.
-- Prompt texts are loaded from `PROMPT_*_SYSTEM` env vars; defaults live in `app/shared/config.py` and the registry is built in `app/domains/ai_tasks/domain/prompts.py`. Bump the `version` in `prompts.py` when changing a prompt's wording meaningfully.
-- `.env` is git-ignored.
-
-## Run
+### 4. Run
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
 - API: `http://127.0.0.1:8000`
+- Web UI: `http://127.0.0.1:8000/`
 - Docs: `http://127.0.0.1:8000/docs`
 
-## Run With Docker (App + Qdrant)
-
-Use one command to start both services:
+### Run everything in Docker (app + Qdrant)
 
 ```bash
-docker compose up --build -d
+docker compose up --build -d   # start
 ```
-
-Stop everything:
 
 ```bash
-docker compose down
+docker compose down            # stop
 ```
+---
 
-## Web UI
+## Configuration
 
-The project ships with a built-in browser UI that exercises every endpoint
-(Ask, Ask-Stream, Classify, Summarize, Extract Keywords, Translate, Analyze Text,
-Document Upload, Semantic Search, and Health).
+All settings are read from environment variables / `.env` and validated by `pydantic-settings` (see `app/shared/config.py`). Highlights:
 
-Once the app is running, just open:
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | OpenAI credentials (required) | — |
+| `OPENAI_MODEL` | Chat model | `gpt-4o-mini` |
+| `OPENAI_EMBEDDING_MODEL` | Embedding model | `text-embedding-3-small` |
+| `OPENAI_TEMPERATURE_*` | Per-task temperatures (classify, summarize, …) | task-specific |
+| `OPENAI_TIMEOUT_SECONDS` / `OPENAI_MAX_RETRIES` | Reliability knobs | `20` / `2` |
+| `QDRANT_URL` / `QDRANT_COLLECTION_NAME` | Vector store target | `localhost:6333` / `documents` |
+| `DOCUMENT_CHUNK_SIZE` / `DOCUMENT_CHUNK_OVERLAP` | Chunking behaviour | `500` / `100` |
+| `RAG_TOP_K` / `RAG_MIN_SIMILARITY` | Retrieval tuning | `4` / `0.2` |
+| `RAG_TEMPERATURE` / `RAG_MAX_TOKENS` | Answer generation | `0.1` / `500` |
+| `PROMPT_*_SYSTEM` | Tunable system prompts per task | sensible defaults |
 
-```
-http://127.0.0.1:8000/
-```
+> Prompts are versioned in `app/domains/ai_tasks/domain/prompts.py`. Bump a prompt's `version` when you change its wording meaningfully. `python-multipart` (file uploads) and `pypdf` (PDF parsing) are included in `requirements.txt`.
 
-- Pick a tool from the sidebar, fill the form, and press **Run**.
-- `Ask (Stream)` renders the answer token-by-token as it streams.
-- Search results show a similarity bar; every response has a raw-JSON view.
-- A live health indicator polls `/health` in the top-right corner.
+---
 
-### Where it lives (architecture)
+## Observability
 
-The UI is a **presentation-only delivery layer** and is intentionally kept out of the
-domain code, so the DDD boundaries stay clean:
+Every request is logged with structured fields:
 
-- `app/web/router.py` — serves the single page at `/`
-- `app/web/static/` — `index.html`, `styles.css`, `app.js`
-
-It talks to the existing domain HTTP endpoints over the same origin, so there is no
-extra coupling to the `ai_tasks` or `documents` bounded contexts.
-
-## Curl Examples
-
-See [`doc/3. API_CURL_EXAMPLES.md`](doc/3.%20API_CURL_EXAMPLES.md) for ready-to-run `curl` examples for every endpoint.
-
-## Error Handling
-
-- Missing/invalid required settings at startup -> app fails fast
-- Rate limit errors -> `429`
-- Provider timeout -> `504`
-- Temporary provider failures -> `503`
-- Other provider errors -> `502`
-- Invalid input payload -> `422`
-- Unexpected server errors -> `500`
-
-## Logging
-
-The backend logs:
-
-- `request_id` (returned in `x-request-id`)
-- endpoint name
-- model name
-- latency
-- token usage
+- `request_id` (also returned in the `x-request-id` response header)
+- endpoint name, model name, latency, token usage
 - chunk counts for uploads
 - similarity scores and search latency
 - errors
 
-Sensitive values such as `OPENAI_API_KEY` are not logged.
+Sensitive values such as `OPENAI_API_KEY` are never logged.
 
-## Limitations (Current Stage)
+---
 
-- Qdrant must be running for document upload/search
-- Upload supports `.txt` only
+## Current limitations
+
+- Qdrant must be running for upload / search / ask.
+- Upload supports `.txt` and text-based `.pdf` only (no OCR for scanned PDFs).

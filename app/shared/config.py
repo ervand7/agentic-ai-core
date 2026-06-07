@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     DOCUMENT_CHUNK_SIZE: int = Field(default=500, ge=50)
     DOCUMENT_CHUNK_OVERLAP: int = Field(default=100, ge=0)
 
+    RAG_TOP_K: int = Field(default=4, ge=1, le=20)
+    RAG_MIN_SIMILARITY: float = Field(default=0.2, ge=0.0, le=1.0)
+    RAG_TEMPERATURE: float = Field(default=0.1, ge=0.0, le=2.0)
+    RAG_MAX_TOKENS: int = Field(default=500, ge=1)
+
     PROMPT_ASK_SYSTEM: str = Field(
         default="You are a helpful assistant. Give clear and concise answers.",
         min_length=1,
@@ -77,6 +82,16 @@ class Settings(BaseSettings):
             "You are an NLP assistant. Analyze user text and return valid JSON. "
             "Include summary, sentiment (positive|negative|neutral), keywords list, "
             "and detected language."
+        ),
+        min_length=1,
+    )
+    PROMPT_RAG_SYSTEM: str = Field(
+        default=(
+            "You are a documentation assistant. Answer the user's question using ONLY "
+            "the numbered context snippets provided. Cite the snippets you rely on with "
+            "bracketed numbers like [1] or [2]. If the answer is not contained in the "
+            "context, reply that you don't know based on the provided documents. "
+            "Never invent facts that are not supported by the context."
         ),
         min_length=1,
     )

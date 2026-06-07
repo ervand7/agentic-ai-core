@@ -3,12 +3,20 @@
 from functools import lru_cache
 
 from app.domains.documents.application.services import (
+    AnswerQuestionService,
     IngestDocumentService,
     SearchDocumentsService,
 )
-from app.domains.documents.domain.ports import EmbeddingProvider, VectorStore
+from app.domains.documents.domain.ports import (
+    AnswerGenerator,
+    EmbeddingProvider,
+    VectorStore,
+)
 from app.domains.documents.infrastructure.qdrant_vector_store import (
     QdrantVectorStore,
+)
+from app.domains.documents.infrastructure.openai_answer_generator import (
+    OpenAIAnswerGenerator,
 )
 from app.domains.documents.infrastructure.openai_embedding_provider import (
     OpenAIEmbeddingProvider,
@@ -33,6 +41,12 @@ def get_embedding_provider() -> EmbeddingProvider:
     return OpenAIEmbeddingProvider(get_openai_client())
 
 
+@lru_cache
+def get_answer_generator() -> AnswerGenerator:
+    """Singleton answer generator backed by the shared OpenAI client."""
+    return OpenAIAnswerGenerator(get_openai_client())
+
+
 def get_ingest_document_service() -> IngestDocumentService:
     """Compose the ingest use case with its dependencies."""
     settings = get_settings()
@@ -49,4 +63,19 @@ def get_search_documents_service() -> SearchDocumentsService:
     return SearchDocumentsService(
         embedding_provider=get_embedding_provider(),
         vector_store=get_vector_store(),
+    )
+
+
+def get_answer_question_service() -> AnswerQuestionService:
+    """Compose the RAG (ask) use case with its dependencies."""
+    settings = get_settings()
+    return AnswerQuestionService(
+        embedding_provider=get_embedding_provider(),
+        vector_store=get_vector_store(),
+        answer_generator=get_answer_generator(),
+        system_prompt=settings.PROMPT_RAG_SYSTEM,
+        top_k=settings.RAG_TOP_K,
+        min_similarity=settings.RAG_MIN_SIMILARITY,
+        temperature=settings.RAG_TEMPERATURE,
+        max_tokens=settings.RAG_MAX_TOKENS,
     )

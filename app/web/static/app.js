@@ -122,9 +122,9 @@ const TOOLS = [
     path: "/documents/upload",
     kind: "multipart",
     title: "Upload a document",
-    desc: "Upload a .txt file. It is chunked, embedded, and stored in Qdrant.",
+    desc: "Upload a .txt or .pdf file. It is chunked, embedded, and stored in Qdrant.",
     fields: [
-      { name: "file", label: "Document (.txt)", type: "file", accept: ".txt", required: true },
+      { name: "file", label: "Document (.txt, .pdf)", type: "file", accept: ".txt,.pdf", required: true },
     ],
   },
   {
@@ -148,6 +148,27 @@ const TOOLS = [
         placeholder: "retry", hint: "Optional — require this word (hybrid search)." },
       { name: "min_similarity", label: "Min similarity", type: "number", required: false,
         min: 0, max: 1, step: 0.05, placeholder: "0.5", hint: "Optional — drop weak matches (0-1)." },
+    ],
+  },
+  {
+    id: "ask-docs",
+    group: "Documents",
+    name: "Chat with Docs",
+    icon: "✸",
+    method: "POST",
+    path: "/documents/ask",
+    kind: "json",
+    title: "Chat with your documents (RAG)",
+    desc: "Ask a question. The answer is generated only from your uploaded documents, with citations.",
+    fields: [
+      { name: "question", label: "Question", type: "textarea", required: true,
+        placeholder: "How does retry logic work in this project?" },
+      { name: "top_k", label: "Top K", type: "number", required: false, min: 1, max: 20,
+        placeholder: "4", hint: "Optional — how many chunks to use as context." },
+      { name: "filename", label: "Filename filter", type: "text", required: false,
+        placeholder: "sample.txt", hint: "Optional — answer from one file only." },
+      { name: "min_similarity", label: "Min similarity", type: "number", required: false,
+        min: 0, max: 1, step: 0.05, placeholder: "0.2", hint: "Optional — ignore weakly related context (0-1)." },
     ],
   },
   {
@@ -440,6 +461,17 @@ function renderResult(tool, data) {
     data.results.forEach((hit) => block.appendChild(searchHit(hit)));
   }
 
+  // RAG: grounding indicator + citations
+  if (data.used_context !== undefined) {
+    const grounded = el("span", `grounding ${data.used_context ? "ok" : "none"}`,
+      data.used_context ? "Grounded in documents" : "No relevant context — abstained");
+    block.appendChild(grounded);
+  }
+  if (Array.isArray(data.citations) && data.citations.length) {
+    block.appendChild(sectionLabel(`Citations (${data.citations.length})`));
+    data.citations.forEach((c) => block.appendChild(citationCard(c)));
+  }
+
   // Health
   if (data.status && Object.keys(data).length === 1) {
     block.appendChild(metaRow([["Status", data.status]]));
@@ -487,6 +519,7 @@ function searchHit(hit) {
   const top = el("div", "hit-top");
   const score = typeof hit.similarity === "number" ? hit.similarity : 0;
   top.appendChild(el("span", "hit-score", `similarity ${score.toFixed(4)}`));
+  if (hit.filename) top.appendChild(el("span", "hit-file", hit.filename));
   card.appendChild(top);
   card.appendChild(el("div", "hit-text", hit.text || ""));
   const bar = el("div", "score-bar");
@@ -494,6 +527,20 @@ function searchHit(hit) {
   fill.style.width = `${Math.max(0, Math.min(1, score)) * 100}%`;
   bar.appendChild(fill);
   card.appendChild(bar);
+  return card;
+}
+
+function citationCard(c) {
+  const card = el("div", "search-hit");
+  const top = el("div", "hit-top");
+  const left = el("div", "cite-left");
+  left.appendChild(el("span", "cite-badge", `[${c.index}]`));
+  if (c.filename) left.appendChild(el("span", "hit-file", c.filename));
+  top.appendChild(left);
+  const score = typeof c.similarity === "number" ? c.similarity : 0;
+  top.appendChild(el("span", "hit-score", `similarity ${score.toFixed(4)}`));
+  card.appendChild(top);
+  card.appendChild(el("div", "hit-text", c.text || ""));
   return card;
 }
 

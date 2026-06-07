@@ -365,6 +365,32 @@ body {
 .hit-text { font-size: 14px; line-height: 1.6; color: var(--text); }
 .score-bar { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .score-fill { height: 100%; background: var(--accent-grad); border-radius: 999px; }
+.hit-file { font-size: 12px; font-family: "JetBrains Mono", monospace; color: var(--text-dim); }
+
+.cite-left { display: flex; align-items: center; gap: 10px; }
+.cite-badge {
+  font-size: 12px;
+  font-weight: 700;
+  font-family: "JetBrains Mono", monospace;
+  color: #fff;
+  background: rgba(124, 92, 255, 0.35);
+  border: 1px solid rgba(124, 92, 255, 0.5);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+.grounding {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 12px;
+  width: fit-content;
+}
+.grounding.ok { background: rgba(52, 211, 153, 0.16); color: var(--good); }
+.grounding.none { background: rgba(251, 191, 36, 0.16); color: var(--warn); }
 
 .divider { height: 1px; background: var(--panel-border); border: none; margin: 2px 0; }
 

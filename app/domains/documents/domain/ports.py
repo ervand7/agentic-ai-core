@@ -7,7 +7,7 @@ free of HTTP, database, or provider-specific code.
 
 from typing import Optional, Protocol
 
-from app.domains.documents.domain.models import SearchHit, StoredChunk
+from app.domains.documents.domain.models import GeneratedAnswer, SearchHit, StoredChunk
 
 
 class VectorStore(Protocol):
@@ -44,3 +44,23 @@ class EmbeddingProvider(Protocol):
 
     async def embed(self, text: str, request_id: str) -> list[float]:
         """Generate one embedding vector for `text`."""
+
+
+class AnswerGenerator(Protocol):
+    """Abstraction over an LLM used to generate grounded RAG answers.
+
+    Kept separate from the embedding provider so the RAG use case depends only
+    on the capability it needs (turning a prompt into an answer), not on a
+    concrete provider.
+    """
+
+    async def generate(
+        self,
+        *,
+        request_id: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> GeneratedAnswer:
+        """Generate one answer from a system + user prompt."""

@@ -13,7 +13,7 @@ from app.web.router import router as web_router
 
 setup_logging()
 
-app = FastAPI(title="AI Backend", version="3.0.0", lifespan=lifespan)
+app = FastAPI(title="AI Backend", version="3.1.0", lifespan=lifespan)
 app.include_router(ai_tasks_router)
 app.include_router(documents_router)
 app.include_router(web_router)
