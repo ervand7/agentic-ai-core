@@ -19,10 +19,17 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    OPENAI_API_KEY: str = Field(..., min_length=1)
+    OPENAI_API_KEY: str = Field(default="", min_length=1)
     OPENAI_MODEL: str = Field(default="gpt-4o-mini")
     OPENAI_TEMPERATURE: float = Field(default=0.3, ge=0.0, le=2.0)
     OPENAI_MAX_TOKENS: int = Field(default=300, ge=1)
+
+    OPENAI_TEMPERATURE_CLASSIFY: float = Field(default=0.0, ge=0.0, le=2.0)
+    OPENAI_TEMPERATURE_SUMMARIZE: float = Field(default=0.2, ge=0.0, le=2.0)
+    OPENAI_TEMPERATURE_EXTRACT_KEYWORDS: float = Field(default=0.0, ge=0.0, le=2.0)
+    OPENAI_TEMPERATURE_TRANSLATE: float = Field(default=0.1, ge=0.0, le=2.0)
+    OPENAI_TEMPERATURE_ANALYZE_TEXT: float = Field(default=0.0, ge=0.0, le=2.0)
+
     OPENAI_TIMEOUT_SECONDS: float = Field(default=20.0, gt=0)
     OPENAI_MAX_RETRIES: int = Field(default=2, ge=0, le=5)
     OPENAI_RETRY_BASE_DELAY_SECONDS: float = Field(default=0.5, gt=0)

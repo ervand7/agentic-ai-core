@@ -24,6 +24,7 @@ from app.domains.ai_tasks.api.schemas import (
     SummarizeResponse,
     TranslateResponse,
 )
+from app.domains.ai_tasks.constants import Endpoint
 from app.domains.ai_tasks.domain.prompts import get_prompts
 from app.domains.ai_tasks.domain.ports import LLMProvider
 from app.domains.ai_tasks.domain.response_formats import (
@@ -31,6 +32,7 @@ from app.domains.ai_tasks.domain.response_formats import (
     CLASSIFY_RESPONSE_FORMAT,
     KEYWORDS_RESPONSE_FORMAT,
 )
+from app.shared.config import Settings
 from app.shared.exceptions import LLMServiceError
 from app.shared.openai_types import ChatCompletionMessageParam
 
@@ -62,13 +64,14 @@ def _parse_json_content(content: str) -> dict:
 class AITasksService:
     """All AI task use cases grouped behind a single application service."""
 
-    def __init__(self, llm_provider: LLMProvider):
+    def __init__(self, llm_provider: LLMProvider, settings: Settings):
         self._llm = llm_provider
+        self._settings = settings
 
     async def ask(self, question: str, request_id: str) -> AskResponse:
         """Simple question answering use case."""
         result = await self._llm.complete(
-            endpoint="ask",
+            endpoint=Endpoint.ASK,
             request_id=request_id,
             messages=_build_messages(question, "ask_v1"),
         )
@@ -83,7 +86,7 @@ class AITasksService:
     ) -> AsyncGenerator[str, None]:
         """Stream tokens token-by-token for chat-like UIs."""
         async for chunk in self._llm.stream(
-            endpoint="ask-stream",
+            endpoint=Endpoint.ASK_STREAM,
             request_id=request_id,
             messages=_build_messages(question, "ask_stream_v1"),
         ):
@@ -93,10 +96,10 @@ class AITasksService:
     async def classify(self, text: str, request_id: str) -> ClassifyResponse:
         """Classify sentiment and return JSON validated with Pydantic."""
         result = await self._llm.complete(
-            endpoint="classify",
+            endpoint=Endpoint.CLASSIFY,
             request_id=request_id,
             messages=_build_messages(text, "classify_v1"),
-            temperature=0,
+            temperature=self._settings.OPENAI_TEMPERATURE_CLASSIFY,
             response_format=CLASSIFY_RESPONSE_FORMAT,
         )
         raw = _parse_json_content(result.content)
@@ -105,10 +108,10 @@ class AITasksService:
     async def summarize(self, text: str, request_id: str) -> SummarizeResponse:
         """Summarize text into a short answer."""
         result = await self._llm.complete(
-            endpoint="summarize",
+            endpoint=Endpoint.SUMMARIZE,
             request_id=request_id,
             messages=_build_messages(text, "summarize_v1"),
-            temperature=0.2,
+            temperature=self._settings.OPENAI_TEMPERATURE_SUMMARIZE,
         )
         return SummarizeResponse(
             summary=result.content,
@@ -121,10 +124,10 @@ class AITasksService:
     ) -> ExtractKeywordsResponse:
         """Extract relevant terms as a JSON list."""
         result = await self._llm.complete(
-            endpoint="extract-keywords",
+            endpoint=Endpoint.EXTRACT_KEYWORDS,
             request_id=request_id,
             messages=_build_messages(text, "extract_keywords_v1"),
-            temperature=0,
+            temperature=self._settings.OPENAI_TEMPERATURE_EXTRACT_KEYWORDS,
             response_format=KEYWORDS_RESPONSE_FORMAT,
         )
         raw_data = _parse_json_content(result.content)
@@ -152,10 +155,10 @@ class AITasksService:
         }
         messages: list[ChatCompletionMessageParam] = [system_message, user_message]
         result = await self._llm.complete(
-            endpoint="translate",
+            endpoint=Endpoint.TRANSLATE,
             request_id=request_id,
             messages=messages,
-            temperature=0.1,
+            temperature=self._settings.OPENAI_TEMPERATURE_TRANSLATE,
         )
         return TranslateResponse(
             translation=result.content,
@@ -170,10 +173,10 @@ class AITasksService:
         Uses one structured-output call to keep latency and token usage lower.
         """
         result = await self._llm.complete(
-            endpoint="analyze-text",
+            endpoint=Endpoint.ANALYZE_TEXT,
             request_id=request_id,
             messages=_build_messages(text, "analyze_text_v1"),
-            temperature=0,
+            temperature=self._settings.OPENAI_TEMPERATURE_ANALYZE_TEXT,
             response_format=ANALYZE_TEXT_RESPONSE_FORMAT,
         )
         raw_data = _parse_json_content(result.content)
