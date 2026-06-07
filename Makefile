@@ -2,7 +2,7 @@
 # Run `make` or `make help` to see all available commands.
 
 # Use the project virtualenv if it exists, otherwise fall back to system python.
-VENV ?= .venv
+VENV ?= venv
 PYTHON := $(VENV)/bin/python
 PIP := $(PYTHON) -m pip
 
@@ -53,16 +53,20 @@ serve: ## Run the API without reload (prod-like)
 # Tests
 # ---------------------------------------------------------------------------
 .PHONY: test
-test: ## Run the full test suite
-	$(PYTHON) -m pytest
+test: ## Run the full suite (unit + api + all integration tiers)
+	RUN_LIVE_OPENAI=1 $(PYTHON) -m pytest
 
 .PHONY: test-unit
 test-unit: ## Run unit tests only
 	$(PYTHON) -m pytest $(TESTS)/unit
 
 .PHONY: test-api
-test-api: ## Run API/integration tests only
+test-api: ## Run API router tests only
 	$(PYTHON) -m pytest $(TESTS)/api
+
+.PHONY: test-integration
+test-integration: ## Run all integration tests (Tier 1 + Qdrant + live OpenAI)
+	RUN_LIVE_OPENAI=1 $(PYTHON) -m pytest $(TESTS)/integration -m integration
 
 .PHONY: test-cov
 test-cov: ## Run tests with a terminal coverage report
