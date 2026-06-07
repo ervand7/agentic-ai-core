@@ -12,6 +12,33 @@ from app.domains.documents.domain.ports import VectorStore
 
 logger = logging.getLogger(__name__)
 
+# HNSW index tuning used when the collection is first created.
+HNSW_M = 16
+HNSW_EF_CONSTRUCT = 100
+HNSW_FULL_SCAN_THRESHOLD = 10_000
+
+# Maximum number of points fetched in a single `scroll` batch.
+SCROLL_BATCH_LIMIT = 10_000
+
+# When keyword reranking is enabled, over-fetch candidates so lexical
+# scoring has more rows to rerank, capped to avoid huge responses.
+KEYWORD_CANDIDATE_MULTIPLIER = 5
+MAX_CANDIDATE_LIMIT = 200
+
+# Number of characters of chunk text included in log previews.
+LOG_TEXT_PREVIEW_LENGTH = 80
+
+# Maximum normalized score value.
+MAX_SCORE = 1.0
+
+# Weights for the standalone keyword score (phrase match vs token coverage).
+KEYWORD_PHRASE_WEIGHT = 0.6
+KEYWORD_TOKEN_WEIGHT = 0.4
+
+# Weights for blending vector similarity with the keyword score in hybrid search.
+HYBRID_VECTOR_WEIGHT = 0.8
+HYBRID_KEYWORD_WEIGHT = 0.2
+
 
 class QdrantVectorStore(VectorStore):
     """Vector store backed by a Qdrant collection."""
@@ -74,7 +101,7 @@ class QdrantVectorStore(VectorStore):
 
         records, _ = self._client.scroll(
             collection_name=self._collection_name,
-            limit=10_000,
+            limit=SCROLL_BATCH_LIMIT,
             with_payload=True,
             with_vectors=True,
         )
@@ -103,7 +130,11 @@ class QdrantVectorStore(VectorStore):
         query_filter = self._build_filename_filter(filename_filter)
         keyword_query = (keyword or "").strip().lower()
         # Over-fetch when keyword ranking is enabled so lexical scoring can rerank.
-        candidate_limit = min(200, top_k * 5) if keyword_query else top_k
+        candidate_limit = (
+            min(MAX_CANDIDATE_LIMIT, top_k * KEYWORD_CANDIDATE_MULTIPLIER)
+            if keyword_query
+            else top_k
+        )
 
         response = self._client.query_points(
             collection_name=self._collection_name,
@@ -140,7 +171,7 @@ class QdrantVectorStore(VectorStore):
                 vector_score,
                 keyword_score,
                 final_score,
-                text[:80].replace("\n", " "),
+                text[:LOG_TEXT_PREVIEW_LENGTH].replace("\n", " "),
             )
             scored_hits.append(
                 SearchHit(
@@ -167,9 +198,9 @@ class QdrantVectorStore(VectorStore):
                 size=vector_size,
                 distance=models.Distance.COSINE,
                 hnsw_config=models.HnswConfigDiff(
-                    m=16,
-                    ef_construct=100,
-                    full_scan_threshold=10_000,
+                    m=HNSW_M,
+                    ef_construct=HNSW_EF_CONSTRUCT,
+                    full_scan_threshold=HNSW_FULL_SCAN_THRESHOLD,
                 ),
             ),
         )
@@ -223,7 +254,10 @@ class QdrantVectorStore(VectorStore):
 
         token_matches = sum(1 for token in keyword_tokens if token in normalized_text)
         token_ratio = token_matches / len(keyword_tokens)
-        return min(1.0, 0.6 * phrase_present + 0.4 * token_ratio)
+        return min(
+            MAX_SCORE,
+            KEYWORD_PHRASE_WEIGHT * phrase_present + KEYWORD_TOKEN_WEIGHT * token_ratio,
+        )
 
     @staticmethod
     def _hybrid_score(
@@ -235,7 +269,10 @@ class QdrantVectorStore(VectorStore):
         if not keyword_used:
             return vector_score
         # Weighted blend: semantic similarity dominates, keyword adds lexical signal.
-        return 0.8 * vector_score + 0.2 * keyword_score
+        return (
+            HYBRID_VECTOR_WEIGHT * vector_score
+            + HYBRID_KEYWORD_WEIGHT * keyword_score
+        )
 
     @staticmethod
     def _payload_str(payload: Optional[models.Payload], key: str) -> str:

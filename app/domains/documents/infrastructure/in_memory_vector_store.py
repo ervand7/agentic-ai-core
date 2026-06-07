@@ -6,6 +6,7 @@ Replace with a real vector database in production.
 """
 
 import logging
+from typing import Optional
 
 from app.domains.documents.domain.chunking import cosine_similarity
 from app.domains.documents.domain.models import SearchHit, StoredChunk
@@ -47,11 +48,26 @@ class InMemoryVectorStore(VectorStore):
         self,
         query_embedding: list[float],
         top_k: int,
+        filename_filter: Optional[str] = None,
+        keyword: Optional[str] = None,
+        min_similarity: Optional[float] = None,
     ) -> list[SearchHit]:
         """Score every stored chunk using cosine similarity and return top hits."""
+        normalized_filename = (filename_filter or "").strip()
+        keyword_query = (keyword or "").strip().lower()
+
         scored: list[SearchHit] = []
         for chunk in self._chunks:
+            if normalized_filename and chunk.filename != normalized_filename:
+                continue
+
             similarity = cosine_similarity(query_embedding, chunk.embedding)
+            if min_similarity is not None and similarity < min_similarity:
+                continue
+
+            if keyword_query and keyword_query not in chunk.text.lower():
+                continue
+
             logger.info(
                 "semantic_similarity_score filename=%s similarity=%.4f text_preview=%s",
                 chunk.filename,
