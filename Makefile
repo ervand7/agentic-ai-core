@@ -1,10 +1,9 @@
 # Makefile for agentic-ai-core
 # Run `make` or `make help` to see all available commands.
 
-# Use the project virtualenv if it exists, otherwise fall back to system python.
-VENV ?= venv
-PYTHON := $(VENV)/bin/python
-PIP := $(PYTHON) -m pip
+# Dependencies are managed with Poetry; run everything inside its venv.
+POETRY ?= poetry
+PYTHON := $(POETRY) run python
 
 # Default app entrypoint + dev server settings.
 APP := app.main:app
@@ -29,14 +28,13 @@ help: ## Show this help
 # ---------------------------------------------------------------------------
 # Environment setup
 # ---------------------------------------------------------------------------
-.PHONY: venv
-venv: ## Create the virtualenv (.venv) using python3.12
-	python3.12 -m venv $(VENV)
-	$(PIP) install --upgrade pip
-
 .PHONY: install
-install: ## Install runtime dependencies
-	$(PIP) install -r requirements.txt
+install: ## Install runtime dependencies only
+	$(POETRY) install --only main
+
+.PHONY: install-dev
+install-dev: ## Install runtime + dev dependencies
+	$(POETRY) install
 
 # ---------------------------------------------------------------------------
 # Run

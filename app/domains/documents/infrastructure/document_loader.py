@@ -1,11 +1,3 @@
-"""
-Document loading: turn an uploaded file's raw bytes into plain text.
-
-This is the "document loading" step of the RAG pipeline. It lives in
-infrastructure because parsing formats like PDF depends on third-party
-libraries; the rest of the pipeline only ever sees clean text.
-"""
-
 import io
 
 SUPPORTED_EXTENSIONS = (".txt", ".pdf")
@@ -53,7 +45,7 @@ def _extract_pdf(raw_bytes: bytes) -> str:
     except ModuleNotFoundError as exc:  # pragma: no cover - depends on env
         raise DocumentDecodeError(
             "PDF support requires the 'pypdf' package. Install it with "
-            "`pip install -r requirements.txt`."
+            "`poetry install`."
         ) from exc
 
     try:

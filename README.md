@@ -69,11 +69,14 @@ Interactive OpenAPI docs are available at `/docs`. Ready-to-run `curl` snippets 
 
 ### 1. Install
 
+Dependencies are managed with [Poetry](https://python-poetry.org/).
+
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+poetry install            # runtime + dev dependencies
+# or: poetry install --only main   # runtime only
 ```
+
+Run commands inside the Poetry environment with `poetry run ...`, or open a shell with `poetry shell`.
 
 ### 2. Configure
 
@@ -93,7 +96,7 @@ docker compose up -d qdrant
 ### 4. Run
 
 ```bash
-uvicorn app.main:app --reload
+poetry run uvicorn app.main:app --reload
 ```
 
 - API: `http://127.0.0.1:8000`
@@ -128,7 +131,7 @@ All settings are read from environment variables / `.env` and validated by `pyda
 | `RAG_TEMPERATURE` / `RAG_MAX_TOKENS` | Answer generation | `0.1` / `500` |
 | `PROMPT_*_SYSTEM` | Tunable system prompts per task | sensible defaults |
 
-> Prompts are versioned in `app/domains/ai_tasks/domain/prompts.py`. Bump a prompt's `version` when you change its wording meaningfully. `python-multipart` (file uploads) and `pypdf` (PDF parsing) are included in `requirements.txt`.
+> Prompts are versioned in `app/domains/ai_tasks/domain/prompts.py`. Bump a prompt's `version` when you change its wording meaningfully. `python-multipart` (file uploads) and `pypdf` (PDF parsing) are included in `pyproject.toml`.
 
 ---
 
