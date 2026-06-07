@@ -20,6 +20,11 @@ Production-style AI backend with async OpenAI calls, clean service boundaries, a
 - `POST /documents/upload` (upload `.txt`, chunk text, embed chunks, store vectors in Qdrant)
 - `POST /documents/search` (embed query and search nearest chunks in Qdrant)
 
+### Web UI
+
+- A built-in single-page UI that covers every endpoint above
+- Served by the app at `/` (no separate frontend server needed)
+
 ### Operational features
 
 - Startup validation for required settings (`OPENAI_API_KEY`)
@@ -88,112 +93,37 @@ Stop everything:
 docker compose down
 ```
 
+## Web UI
+
+The project ships with a built-in browser UI that exercises every endpoint
+(Ask, Ask-Stream, Classify, Summarize, Extract Keywords, Translate, Analyze Text,
+Document Upload, Semantic Search, and Health).
+
+Once the app is running, just open:
+
+```
+http://127.0.0.1:8000/
+```
+
+- Pick a tool from the sidebar, fill the form, and press **Run**.
+- `Ask (Stream)` renders the answer token-by-token as it streams.
+- Search results show a similarity bar; every response has a raw-JSON view.
+- A live health indicator polls `/health` in the top-right corner.
+
+### Where it lives (architecture)
+
+The UI is a **presentation-only delivery layer** and is intentionally kept out of the
+domain code, so the DDD boundaries stay clean:
+
+- `app/web/router.py` — serves the single page at `/`
+- `app/web/static/` — `index.html`, `styles.css`, `app.js`
+
+It talks to the existing domain HTTP endpoints over the same origin, so there is no
+extra coupling to the `ai_tasks` or `documents` bounded contexts.
+
 ## Curl Examples
 
-### Health
-
-```bash
-curl "http://127.0.0.1:8000/health"
-```
-
-### Ask
-
-```bash
-curl -X POST "http://127.0.0.1:8000/ask" \
-  -H "Content-Type: application/json" \
-  -d '{"question":"Explain async/await in Python in simple words."}'
-```
-
-### Ask Stream
-
-```bash
-curl -N -X POST "http://127.0.0.1:8000/ask-stream" \
-  -H "Content-Type: application/json" \
-  -d '{"question":"Write a short paragraph about FastAPI streaming."}'
-```
-
-### Classify
-
-```bash
-curl -X POST "http://127.0.0.1:8000/classify" \
-  -H "Content-Type: application/json" \
-  -d '{"text":"The product is good but shipping was slow."}'
-```
-
-### Summarize
-
-```bash
-curl -X POST "http://127.0.0.1:8000/summarize" \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Paste a longer paragraph here..."}'
-```
-
-### Extract Keywords
-
-```bash
-curl -X POST "http://127.0.0.1:8000/extract-keywords" \
-  -H "Content-Type: application/json" \
-  -d '{"text":"FastAPI is often used for building async APIs in Python."}'
-```
-
-### Translate
-
-```bash
-curl -X POST "http://127.0.0.1:8000/translate" \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Good morning, how are you?","target_language":"Spanish"}'
-```
-
-### Analyze Text (combined endpoint)
-
-```bash
-curl -X POST "http://127.0.0.1:8000/analyze-text" \
-  -H "Content-Type: application/json" \
-  -d '{"text":"FastAPI is great for building APIs quickly, but onboarding juniors needs better docs."}'
-```
-
-### Upload document
-
-```bash
-curl -X POST "http://127.0.0.1:8000/documents/upload" \
-  -F "file=@./sample.txt"
-```
-
-Example response:
-
-```json
-{
-  "filename": "sample.txt",
-  "chunks_stored": 4,
-  "total_characters": 1672
-}
-```
-
-### Semantic search
-
-```bash
-curl -X POST "http://127.0.0.1:8000/documents/search" \
-  -H "Content-Type: application/json" \
-  -d '{"query":"How does retry logic work?","top_k":3}'
-```
-
-Example response:
-
-```json
-{
-  "query": "How does retry logic work?",
-  "results": [
-    {
-      "text": "Retries use exponential backoff to reduce pressure...",
-      "similarity": 0.9241
-    },
-    {
-      "text": "Timeout handling returns a friendly API message...",
-      "similarity": 0.8819
-    }
-  ]
-}
-```
+See [`doc/3. API_CURL_EXAMPLES.md`](doc/3.%20API_CURL_EXAMPLES.md) for ready-to-run `curl` examples for every endpoint.
 
 ## Error Handling
 

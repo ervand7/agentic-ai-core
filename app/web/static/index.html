@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Backend Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">◆</div>
+        <div class="brand-text">
+          <span class="brand-title">AI Backend</span>
+          <span class="brand-sub">Studio</span>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav"></nav>
+
+      <div class="sidebar-footer">
+        <a class="ghost-link" href="/docs" target="_blank" rel="noreferrer">API Docs ↗</a>
+        <span class="version" id="appVersion">v3.0.0</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1 class="tool-title" id="toolTitle">Welcome</h1>
+          <p class="tool-desc" id="toolDesc">Pick a tool from the left to get started.</p>
+        </div>
+        <div class="topbar-right">
+          <div class="health" id="health">
+            <span class="health-dot" id="healthDot"></span>
+            <span id="healthText">checking…</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="content">
+        <div class="panel form-panel">
+          <form id="toolForm" class="tool-form" autocomplete="off"></form>
+          <div class="form-actions">
+            <button type="submit" form="toolForm" class="btn primary" id="submitBtn">
+              <span class="btn-label">Run</span>
+              <span class="spinner" hidden></span>
+            </button>
+            <button type="button" class="btn ghost" id="clearBtn">Clear</button>
+          </div>
+        </div>
+
+        <div class="panel result-panel">
+          <div class="result-header">
+            <span class="result-title">Result</span>
+            <div class="result-tools">
+              <span class="status-pill" id="statusPill" hidden></span>
+              <button type="button" class="chip-btn" id="copyBtn" hidden>Copy JSON</button>
+            </div>
+          </div>
+          <div class="result-body" id="resultBody">
+            <div class="empty-state" id="emptyState">
+              <div class="empty-glyph">⟡</div>
+              <p>Run a tool to see results here.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

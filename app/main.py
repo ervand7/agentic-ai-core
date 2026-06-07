@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from app.domains.ai_tasks.api.router import router as ai_tasks_router
@@ -19,6 +20,8 @@ from app.shared.exceptions import (
     LLMTimeoutError,
 )
 from app.shared.logging import setup_logging
+from app.web.router import STATIC_DIR
+from app.web.router import router as web_router
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -26,6 +29,8 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="AI Backend", version="3.0.0")
 app.include_router(ai_tasks_router)
 app.include_router(documents_router)
+app.include_router(web_router)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.on_event("startup")
