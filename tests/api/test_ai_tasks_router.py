@@ -13,6 +13,8 @@ from app.domains.ai_tasks.api.schemas import (
     ClassifyResponse,
     ExtractKeywordsResponse,
     SummarizeResponse,
+    ToolAssistantResponse,
+    ToolExecutionResult,
     TranslateResponse,
 )
 from app.main import app
@@ -72,6 +74,21 @@ def ai_tasks_service() -> MagicMock:
             model="m",
             tokens_used=5,
             prompt_version="analyze_text_v1",
+        )
+    )
+    mock.tool_assistant = AsyncMock(
+        return_value=ToolAssistantResponse(
+            answer="tool answer",
+            tool_calls=[
+                ToolExecutionResult(
+                    name="get_weather",
+                    arguments={"location": "Yerevan"},
+                    result={"temperature": 21},
+                )
+            ],
+            model="m",
+            tokens_used=6,
+            prompt_version="tool_assistant_v1",
         )
     )
 
@@ -137,6 +154,14 @@ class TestOtherTasks:
         body = resp.json()
         assert body["language"] == "en"
         assert body["prompt_version"] == "analyze_text_v1"
+
+    def test_tool_assistant(self, client, ai_tasks_service):
+        resp = client.post("/tool-assistant", json={"message": "weather in Yerevan"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["answer"] == "tool answer"
+        assert body["tool_calls"][0]["name"] == "get_weather"
+        ai_tasks_service.tool_assistant.assert_awaited_once()
 
 
 class TestErrorMapping:

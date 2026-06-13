@@ -18,6 +18,7 @@ class Endpoint:
     EXTRACT_KEYWORDS: Final[str] = "extract-keywords"
     TRANSLATE: Final[str] = "translate"
     ANALYZE_TEXT: Final[str] = "analyze-text"
+    TOOL_ASSISTANT: Final[str] = "tool-assistant"
 
 
 __all__ = ["Endpoint"]

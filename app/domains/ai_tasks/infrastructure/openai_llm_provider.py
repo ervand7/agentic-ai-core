@@ -3,12 +3,14 @@
 import logging
 import time
 from collections.abc import AsyncIterator
-from typing import Optional
+from typing import Any, Optional
 
 from app.domains.ai_tasks.domain.ports import (
     CompletionResult,
     LLMProvider,
     StreamChunk,
+    ToolCall,
+    ToolCompletionResult,
 )
 from app.shared.infrastructure.openai_client import OpenAIClient
 from app.shared.openai_types import ChatCompletionMessageParam, ResponseFormat
@@ -45,6 +47,50 @@ class OpenAILLMProvider(LLMProvider):
             content=completion.choices[0].message.content or "",
             model=completion.model,
             tokens_used=usage.total_tokens if usage else 0,
+        )
+
+    async def complete_with_tools(
+        self,
+        *,
+        endpoint: str,
+        request_id: str,
+        messages: list[ChatCompletionMessageParam],
+        tools: list[dict[str, Any]],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> ToolCompletionResult:
+        completion = await self._client.create_chat_completion(
+            endpoint=endpoint,
+            request_id=request_id,
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        usage = completion.usage
+        message = completion.choices[0].message
+        tool_calls: list[ToolCall] = []
+        for tool_call in message.tool_calls or []:
+            function = getattr(tool_call, "function", None)
+            if function is None:
+                continue
+            name = getattr(function, "name", "")
+            arguments = getattr(function, "arguments", "")
+            if not name:
+                continue
+            tool_calls.append(
+                ToolCall(
+                    id=tool_call.id,
+                    name=name,
+                    arguments=arguments,
+                )
+            )
+        return ToolCompletionResult(
+            content=message.content or "",
+            model=completion.model,
+            tokens_used=usage.total_tokens if usage else 0,
+            tool_calls=tool_calls,
         )
 
     async def stream(

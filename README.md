@@ -27,6 +27,7 @@
 | Area | What you get |
 | --- | --- |
 | **LLM text tools** | Ask, streaming Ask, classify (sentiment), summarize, extract keywords, translate, full text analysis |
+| **Tool calling** | Model-selected tools for mock weather, document search, ticket drafts, and email drafts |
 | **Semantic search** | Embed-and-search over uploaded docs, similarity scores, top-K control |
 | **Hybrid search** | Vector + keyword matching, filename filtering, min-similarity threshold |
 | **RAG** | Grounded answers with numbered citations + graceful abstention |
@@ -52,6 +53,7 @@
 | `POST` | `/extract-keywords` | Key terms as structured JSON |
 | `POST` | `/translate` | Translate text to a target language |
 | `POST` | `/analyze-text` | Combined summary + sentiment + keywords + language |
+| `POST` | `/tool-assistant` | Assistant that can call safe backend tools |
 
 ### Semantic search & RAG (`documents`)
 

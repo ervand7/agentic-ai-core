@@ -69,6 +69,11 @@ def _build_prompts(settings: Settings) -> dict[str, PromptTemplate]:
             version="v1",
             system_prompt=settings.PROMPT_ANALYZE_TEXT_SYSTEM,
         ),
+        "tool_assistant_v1": PromptTemplate(
+            name="tool_assistant",
+            version="v1",
+            system_prompt=settings.PROMPT_TOOL_ASSISTANT_SYSTEM,
+        ),
     }
 
 

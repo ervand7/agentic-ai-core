@@ -32,6 +32,18 @@ class TestFreeFormEndpoints:
         assert resp.status_code == 200
         assert resp.text == "Hello world"
 
+    def test_tool_assistant_uses_fake_tool_call(self, ai_tasks_harness):
+        resp = ai_tasks_harness.client.post(
+            "/tool-assistant", json={"message": "What is the weather?"}
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["answer"] == "I used the requested tool and summarized the result."
+        assert body["tool_calls"][0]["name"] == "get_weather"
+        assert body["tool_calls"][0]["risk"] == "read_only"
+        assert body["tool_calls"][0]["status"] == "executed"
+        assert body["tool_calls"][0]["result"]["location"] == "Yerevan"
+
 
 class TestStructuredEndpoints:
     def test_classify_parses_and_validates_json(self, ai_tasks_harness):

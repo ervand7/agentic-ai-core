@@ -15,7 +15,12 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from app.domains.ai_tasks.constants import Endpoint
-from app.domains.ai_tasks.domain.ports import CompletionResult, StreamChunk
+from app.domains.ai_tasks.domain.ports import (
+    CompletionResult,
+    StreamChunk,
+    ToolCall,
+    ToolCompletionResult,
+)
 from app.domains.documents.domain.models import GeneratedAnswer
 from app.shared.openai_types import ChatCompletionMessageParam, ResponseFormat
 
@@ -132,6 +137,34 @@ class FakeLLMProvider:
             tokens_used=max(1, len(user_text.split())),
         )
 
+    async def complete_with_tools(
+        self,
+        *,
+        endpoint: str,
+        request_id: str,
+        messages: list[ChatCompletionMessageParam],
+        tools: list[dict[str, Any]],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> ToolCompletionResult:
+        self.calls.append({"endpoint": endpoint, "request_id": request_id})
+        user_text = _last_user_text(messages)
+        tool_calls: list[ToolCall] = []
+        if "weather" in user_text.lower():
+            tool_calls.append(
+                ToolCall(
+                    id="call_weather",
+                    name="get_weather",
+                    arguments=json.dumps({"location": "Yerevan"}),
+                )
+            )
+        return ToolCompletionResult(
+            content="" if tool_calls else f"echo: {user_text}",
+            model=self.model,
+            tokens_used=max(1, len(user_text.split())),
+            tool_calls=tool_calls,
+        )
+
     async def stream(
         self,
         *,
@@ -167,5 +200,7 @@ class FakeLLMProvider:
                     "language": "en",
                 }
             )
+        if endpoint == Endpoint.TOOL_ASSISTANT:
+            return "I used the requested tool and summarized the result."
         # Free-form endpoints (ask / summarize / translate) echo the input.
         return f"echo: {user_text}"

@@ -15,6 +15,8 @@ from app.domains.ai_tasks.api.schemas import (
     ExtractKeywordsResponse,
     SummarizeRequest,
     SummarizeResponse,
+    ToolAssistantRequest,
+    ToolAssistantResponse,
     TranslateRequest,
     TranslateResponse,
 )
@@ -104,3 +106,13 @@ async def analyze_text_endpoint(
 ) -> AnalyzeTextResponse:
     """Combined analysis endpoint."""
     return await service.analyze_text(payload.text, request.state.request_id)
+
+
+@router.post("/tool-assistant", response_model=ToolAssistantResponse)
+async def tool_assistant(
+    payload: ToolAssistantRequest,
+    request: Request,
+    service: AITasksService = Depends(get_ai_tasks_service),
+) -> ToolAssistantResponse:
+    """Let the model choose and call safe backend tools."""
+    return await service.tool_assistant(payload.message, request.state.request_id)

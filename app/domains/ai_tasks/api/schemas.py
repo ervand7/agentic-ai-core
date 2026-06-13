@@ -94,3 +94,33 @@ class AnalyzeTextResponse(BaseModel):
     model: str
     tokens_used: int
     prompt_version: str
+
+
+class ToolAssistantRequest(BaseModel):
+    """Incoming request for the tool-calling assistant."""
+
+    message: str = Field(..., min_length=1, description="User request")
+
+
+class ToolExecutionResult(BaseModel):
+    """One backend tool call made during a tool-assistant run."""
+
+    name: str
+    arguments: dict
+    result: dict
+    tool_call_id: str | None = None
+    risk: str = "unknown"
+    requires_approval: bool = False
+    approved: bool = True
+    status: str = "executed"
+    error: str | None = None
+
+
+class ToolAssistantResponse(BaseModel):
+    """Final answer plus the tool calls used to produce it."""
+
+    answer: str
+    tool_calls: list[ToolExecutionResult]
+    model: str
+    tokens_used: int
+    prompt_version: str

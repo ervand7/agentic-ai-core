@@ -123,6 +123,20 @@ class TestChatCompletionSuccess:
         assert kwargs["temperature"] == 1.5
         assert kwargs["max_tokens"] == 42
 
+    async def test_tools_are_included_when_set(self, client):
+        client.client.chat.completions.create.return_value = make_chat_completion()
+        tools = [{"type": "function", "function": {"name": "get_weather"}}]
+        await client.create_chat_completion(
+            endpoint="tool-assistant",
+            request_id="r",
+            messages=_MESSAGES,
+            tools=tools,
+            tool_choice="auto",
+        )
+        kwargs = client.client.chat.completions.create.call_args.kwargs
+        assert kwargs["tools"] == tools
+        assert kwargs["tool_choice"] == "auto"
+
 
 class TestChatCompletionRetries:
     async def test_retries_then_succeeds(self, client):

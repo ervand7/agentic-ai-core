@@ -18,7 +18,11 @@ import pytest
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from app.domains.ai_tasks.domain.ports import CompletionResult, LLMProvider  # noqa: E402
+from app.domains.ai_tasks.domain.ports import (  # noqa: E402
+    CompletionResult,
+    LLMProvider,
+    ToolCompletionResult,
+)
 from app.domains.documents.domain.models import GeneratedAnswer  # noqa: E402
 from app.domains.documents.domain.ports import (  # noqa: E402
     AnswerGenerator,
@@ -120,6 +124,12 @@ def make_llm_provider_mock(
     mock = create_autospec(LLMProvider, instance=True)
     mock.complete.return_value = CompletionResult(
         content=content, model=model, tokens_used=tokens_used
+    )
+    mock.complete_with_tools.return_value = ToolCompletionResult(
+        content=content,
+        model=model,
+        tokens_used=tokens_used,
+        tool_calls=[],
     )
     return mock
 

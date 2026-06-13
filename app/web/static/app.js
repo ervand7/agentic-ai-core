@@ -114,6 +114,21 @@ const TOOLS = [
     ],
   },
   {
+    id: "tool-assistant",
+    group: "AI Tasks",
+    name: "Tool Assistant",
+    icon: "⚙",
+    method: "POST",
+    path: "/tool-assistant",
+    kind: "json",
+    title: "Tool-calling assistant",
+    desc: "Let the model choose safe backend tools: weather, document search, ticket drafts, and email drafts.",
+    fields: [
+      { name: "message", label: "Message", type: "textarea", required: true,
+        placeholder: "Search my docs for retry logic and create a high-priority ticket draft about improving it." },
+    ],
+  },
+  {
     id: "upload",
     group: "Documents",
     name: "Upload",

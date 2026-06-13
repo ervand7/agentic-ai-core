@@ -57,6 +57,41 @@ class TestComplete:
         assert result.tokens_used == 0
 
 
+class TestCompleteWithTools:
+    async def test_maps_tool_calls_to_result(self):
+        client = AsyncMock()
+        tool_call = SimpleNamespace(
+            id="call_1",
+            function=SimpleNamespace(
+                name="get_weather",
+                arguments='{"location":"Yerevan"}',
+            ),
+        )
+        message = SimpleNamespace(content=None, tool_calls=[tool_call])
+        choice = SimpleNamespace(message=message)
+        client.create_chat_completion.return_value = SimpleNamespace(
+            choices=[choice],
+            model="m",
+            usage=SimpleNamespace(total_tokens=12),
+        )
+        provider = OpenAILLMProvider(client)
+
+        result = await provider.complete_with_tools(
+            endpoint="tool-assistant",
+            request_id="r",
+            messages=user_messages("weather"),
+            tools=[{"type": "function"}],
+        )
+
+        assert result.tool_calls[0].id == "call_1"
+        assert result.tool_calls[0].name == "get_weather"
+        assert result.tool_calls[0].arguments == '{"location":"Yerevan"}'
+        assert result.tokens_used == 12
+        kwargs = client.create_chat_completion.call_args.kwargs
+        assert kwargs["tools"] == [{"type": "function"}]
+        assert kwargs["tool_choice"] == "auto"
+
+
 class TestStream:
     @staticmethod
     def _client_with_stream(chunks):

@@ -8,7 +8,7 @@ providers (OpenAI, Anthropic, local model, fakes) in infrastructure.
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 
 from app.shared.openai_types import ChatCompletionMessageParam, ResponseFormat
 
@@ -20,6 +20,25 @@ class CompletionResult:
     content: str
     model: str
     tokens_used: int
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    """A tool call requested by the model."""
+
+    id: str
+    name: str
+    arguments: str
+
+
+@dataclass(frozen=True)
+class ToolCompletionResult:
+    """Completion result that may include model-requested tool calls."""
+
+    content: str
+    model: str
+    tokens_used: int
+    tool_calls: list[ToolCall]
 
 
 @dataclass(frozen=True)
@@ -45,6 +64,18 @@ class LLMProvider(Protocol):
         max_tokens: Optional[int] = None,
     ) -> CompletionResult:
         """Run a non-streaming chat completion."""
+
+    async def complete_with_tools(
+        self,
+        *,
+        endpoint: str,
+        request_id: str,
+        messages: list[ChatCompletionMessageParam],
+        tools: list[dict[str, Any]],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> ToolCompletionResult:
+        """Run a non-streaming chat completion that can request tool calls."""
 
     def stream(
         self,

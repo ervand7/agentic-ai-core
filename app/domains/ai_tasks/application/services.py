@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncGenerator
 from json import JSONDecodeError
+from typing import Any, Optional, cast
 
 from openai.types.chat import (
     ChatCompletionSystemMessageParam,
@@ -22,8 +23,11 @@ from app.domains.ai_tasks.api.schemas import (
     ClassifyResponse,
     ExtractKeywordsResponse,
     SummarizeResponse,
+    ToolAssistantResponse,
+    ToolExecutionResult,
     TranslateResponse,
 )
+from app.domains.ai_tasks.application.tool_runner import ToolRunner
 from app.domains.ai_tasks.constants import Endpoint
 from app.domains.ai_tasks.domain.prompts import get_prompts
 from app.domains.ai_tasks.domain.ports import LLMProvider
@@ -32,6 +36,8 @@ from app.domains.ai_tasks.domain.response_formats import (
     CLASSIFY_RESPONSE_FORMAT,
     KEYWORDS_RESPONSE_FORMAT,
 )
+from app.domains.ai_tasks.domain.tools import TOOL_DEFINITIONS
+from app.domains.documents.application.services import SearchDocumentsService
 from app.shared.config import Settings
 from app.shared.exceptions import LLMServiceError
 from app.shared.openai_types import ChatCompletionMessageParam
@@ -64,9 +70,16 @@ def _parse_json_content(content: str) -> dict:
 class AITasksService:
     """All AI task use cases grouped behind a single application service."""
 
-    def __init__(self, llm_provider: LLMProvider, settings: Settings):
+    def __init__(
+        self,
+        llm_provider: LLMProvider,
+        settings: Settings,
+        document_search: Optional[SearchDocumentsService] = None,
+        tool_runner: Optional[ToolRunner] = None,
+    ):
         self._llm = llm_provider
         self._settings = settings
+        self._tool_runner = tool_runner or ToolRunner(document_search=document_search)
 
     async def ask(self, question: str, request_id: str) -> AskResponse:
         """Simple question answering use case."""
@@ -187,4 +200,73 @@ class AITasksService:
                 "tokens_used": result.tokens_used,
                 "prompt_version": get_prompts()["analyze_text_v1"].prompt_version,
             }
+        )
+
+    async def tool_assistant(
+        self, message: str, request_id: str
+    ) -> ToolAssistantResponse:
+        """Let the model choose safe backend tools, then summarize their results."""
+        messages = _build_messages(message, "tool_assistant_v1")
+        first = await self._llm.complete_with_tools(
+            endpoint=Endpoint.TOOL_ASSISTANT,
+            request_id=request_id,
+            messages=messages,
+            tools=TOOL_DEFINITIONS,
+            temperature=0.0,
+        )
+
+        if not first.tool_calls:
+            return ToolAssistantResponse(
+                answer=first.content,
+                tool_calls=[],
+                model=first.model,
+                tokens_used=first.tokens_used,
+                prompt_version=get_prompts()["tool_assistant_v1"].prompt_version,
+            )
+
+        executed_tools: list[ToolExecutionResult] = []
+        assistant_tool_call_message = {
+            "role": "assistant",
+            "content": first.content or None,
+            "tool_calls": [
+                {
+                    "id": call.id,
+                    "type": "function",
+                    "function": {
+                        "name": call.name,
+                        "arguments": call.arguments,
+                    },
+                }
+                for call in first.tool_calls
+            ],
+        }
+        follow_up_messages = [
+            *messages,
+            cast(ChatCompletionMessageParam, cast(object, assistant_tool_call_message)),
+        ]
+
+        for call in first.tool_calls:
+            execution = await self._tool_runner.execute(call, request_id=request_id)
+            executed_tools.append(execution)
+            tool_result_message = {
+                "role": "tool",
+                "tool_call_id": call.id,
+                "content": json.dumps(execution.result),
+            }
+            follow_up_messages.append(
+                cast(ChatCompletionMessageParam, cast(object, tool_result_message))
+            )
+
+        final = await self._llm.complete(
+            endpoint=Endpoint.TOOL_ASSISTANT,
+            request_id=request_id,
+            messages=follow_up_messages,
+            temperature=0.0,
+        )
+        return ToolAssistantResponse(
+            answer=final.content,
+            tool_calls=executed_tools,
+            model=final.model,
+            tokens_used=first.tokens_used + final.tokens_used,
+            prompt_version=get_prompts()["tool_assistant_v1"].prompt_version,
         )

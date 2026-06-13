@@ -85,6 +85,15 @@ class Settings(BaseSettings):
         ),
         min_length=1,
     )
+    PROMPT_TOOL_ASSISTANT_SYSTEM: str = Field(
+        default=(
+            "You are a safe tool-calling assistant. Use tools only when they help. "
+            "Never claim that a ticket was filed or an email was sent; ticket and "
+            "email tools only create drafts that require human confirmation. "
+            "Summarize tool results clearly for the user."
+        ),
+        min_length=1,
+    )
     PROMPT_RAG_SYSTEM: str = Field(
         default=(
             "You are a documentation assistant. Answer the user's question using ONLY "

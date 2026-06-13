@@ -7,7 +7,13 @@ import pytest
 
 from app.domains.ai_tasks.application.services import AITasksService
 from app.domains.ai_tasks.constants import Endpoint
-from app.domains.ai_tasks.domain.ports import CompletionResult, LLMProvider, StreamChunk
+from app.domains.ai_tasks.domain.ports import (
+    CompletionResult,
+    LLMProvider,
+    StreamChunk,
+    ToolCall,
+    ToolCompletionResult,
+)
 from app.shared.config import Settings
 from app.shared.exceptions import LLMServiceError
 from tests.conftest import async_mock_method, make_llm_provider_mock
@@ -15,6 +21,10 @@ from tests.conftest import async_mock_method, make_llm_provider_mock
 
 def _complete(provider: LLMProvider) -> AsyncMock:
     return async_mock_method(provider, "complete")
+
+
+def _complete_with_tools(provider: LLMProvider) -> AsyncMock:
+    return async_mock_method(provider, "complete_with_tools")
 
 
 @pytest.fixture
@@ -186,3 +196,77 @@ class TestAnalyzeText:
         )
         with pytest.raises(LLMServiceError):
             await service.analyze_text("text", "req-1")
+
+
+class TestToolAssistant:
+    async def test_returns_direct_answer_when_no_tool_called(self, service, provider):
+        _complete_with_tools(provider).return_value = ToolCompletionResult(
+            content="direct answer",
+            model="gpt-4o-mini",
+            tokens_used=9,
+            tool_calls=[],
+        )
+        resp = await service.tool_assistant("hello", "req-1")
+        assert resp.answer == "direct answer"
+        assert resp.tool_calls == []
+        assert resp.prompt_version == "tool_assistant_v1"
+
+    async def test_executes_tool_and_sends_result_back_to_model(
+        self, service, provider
+    ):
+        _complete_with_tools(provider).return_value = ToolCompletionResult(
+            content="",
+            model="gpt-4o-mini",
+            tokens_used=10,
+            tool_calls=[
+                ToolCall(
+                    id="call_1",
+                    name="get_weather",
+                    arguments=json.dumps({"location": "Yerevan"}),
+                )
+            ],
+        )
+        _complete(provider).return_value = CompletionResult(
+            content="Weather summary", model="gpt-4o-mini", tokens_used=7
+        )
+
+        resp = await service.tool_assistant("weather in Yerevan", "req-1")
+
+        assert resp.answer == "Weather summary"
+        assert resp.tokens_used == 17
+        assert resp.tool_calls[0].name == "get_weather"
+        assert resp.tool_calls[0].risk == "read_only"
+        assert resp.tool_calls[0].status == "executed"
+        assert resp.tool_calls[0].result["location"] == "Yerevan"
+        final_messages = _complete(provider).await_args.kwargs["messages"]
+        assert final_messages[-1]["role"] == "tool"
+
+    async def test_create_ticket_is_only_a_draft(self, service, provider):
+        _complete_with_tools(provider).return_value = ToolCompletionResult(
+            content="",
+            model="gpt-4o-mini",
+            tokens_used=5,
+            tool_calls=[
+                ToolCall(
+                    id="call_1",
+                    name="create_ticket",
+                    arguments=json.dumps(
+                        {
+                            "title": "Improve docs",
+                            "description": "Add tool-calling examples.",
+                            "priority": "high",
+                        }
+                    ),
+                )
+            ],
+        )
+        _complete(provider).return_value = CompletionResult(
+            content="Draft created.", model="gpt-4o-mini", tokens_used=5
+        )
+
+        resp = await service.tool_assistant("create ticket", "req-1")
+
+        result = resp.tool_calls[0].result
+        assert resp.tool_calls[0].risk == "draft"
+        assert result["status"] == "draft_created"
+        assert result["requires_human_confirmation"] is True
