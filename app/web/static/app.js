@@ -129,6 +129,23 @@ const TOOLS = [
     ],
   },
   {
+    id: "research-agent",
+    group: "Agents",
+    name: "Research Agent",
+    icon: "⟳",
+    method: "POST",
+    path: "/research-agent",
+    kind: "json",
+    title: "Research agent",
+    desc: "Give a topic. The agent plans, searches your documents over multiple steps, self-critiques, and writes a final report with a full trace.",
+    fields: [
+      { name: "topic", label: "Topic", type: "textarea", required: true,
+        placeholder: "How does this project handle retries and timeouts?" },
+      { name: "max_iterations", label: "Max iterations", type: "number", required: false,
+        min: 1, max: 10, placeholder: "6", hint: "Optional — hard cap on agent loop steps (1-10)." },
+    ],
+  },
+  {
     id: "upload",
     group: "Documents",
     name: "Upload",
@@ -428,6 +445,15 @@ function renderResult(tool, data) {
   body.innerHTML = "";
   const block = el("div", "result-block");
 
+  // Research agent has its own multi-section layout (plan + trace + report).
+  if (tool.id === "research-agent") {
+    renderAgent(block, data);
+    block.appendChild(rawJson(data));
+    body.appendChild(block);
+    $("#copyBtn").hidden = false;
+    return;
+  }
+
   // Primary text-like fields
   const textField = data.answer ?? data.summary ?? data.translation;
   if (textField !== undefined && tool.id !== "analyze-text") {
@@ -506,6 +532,74 @@ function renderResult(tool, data) {
   block.appendChild(rawJson(data));
   body.appendChild(block);
   $("#copyBtn").hidden = false;
+}
+
+function renderAgent(block, data) {
+  // Final report
+  block.appendChild(sectionLabel("Report"));
+  block.appendChild(answerText(data.report || "(no report produced)"));
+
+  // Run summary: stop reason + iterations used
+  const stopMeta = [];
+  if (data.stop_reason) stopMeta.push(["Stop reason", data.stop_reason]);
+  if (data.iterations_used !== undefined) stopMeta.push(["Iterations", data.iterations_used]);
+  if (stopMeta.length) block.appendChild(metaRow(stopMeta));
+
+  // Plan
+  if (Array.isArray(data.plan) && data.plan.length) {
+    block.appendChild(sectionLabel(`Plan (${data.plan.length} steps)`));
+    const list = el("ol", "agent-plan");
+    data.plan.forEach((step) => list.appendChild(el("li", null, step)));
+    block.appendChild(list);
+  }
+
+  // Iteration-by-iteration trace
+  if (Array.isArray(data.iterations) && data.iterations.length) {
+    block.appendChild(sectionLabel(`Trace (${data.iterations.length} steps)`));
+    data.iterations.forEach((step) => block.appendChild(agentStepCard(step)));
+  }
+
+  // Self-critique
+  if (data.critique) {
+    block.appendChild(sectionLabel("Self-critique"));
+    block.appendChild(answerText(data.critique));
+  }
+
+  // Model / token meta footer
+  const meta = [];
+  if (data.model) meta.push(["Model", data.model]);
+  if (data.tokens_used !== undefined) meta.push(["Tokens", data.tokens_used]);
+  if (data.prompt_version) meta.push(["Prompt", data.prompt_version]);
+  if (meta.length) {
+    block.appendChild(el("hr", "divider"));
+    block.appendChild(metaRow(meta));
+  }
+}
+
+function agentStepCard(step) {
+  const card = el("div", "search-hit");
+  const top = el("div", "hit-top");
+  top.appendChild(el("span", "hit-score", `step ${step.iteration}`));
+  const toolCount = Array.isArray(step.tool_calls) ? step.tool_calls.length : 0;
+  top.appendChild(el("span", "hit-file", toolCount ? `${toolCount} tool call(s)` : "final answer"));
+  card.appendChild(top);
+  if (step.thought) card.appendChild(el("div", "hit-text", step.thought));
+  (step.tool_calls || []).forEach((tc) => card.appendChild(agentToolCall(tc)));
+  return card;
+}
+
+function agentToolCall(tc) {
+  const wrap = el("div", "tool-call");
+  const head = el("div", "hit-top");
+  const left = el("div", "cite-left");
+  left.appendChild(el("span", "cite-badge", tc.name || "tool"));
+  if (tc.risk) left.appendChild(el("span", "hit-file", tc.risk));
+  head.appendChild(left);
+  head.appendChild(el("span", `status-pill ${tc.status === "executed" ? "ok" : "err"}`, tc.status || ""));
+  wrap.appendChild(head);
+  const pre = el("pre", "code", JSON.stringify(tc.result ?? {}, null, 2));
+  wrap.appendChild(pre);
+  return wrap;
 }
 
 function labelForTool(tool) {

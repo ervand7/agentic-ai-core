@@ -74,6 +74,21 @@ def _build_prompts(settings: Settings) -> dict[str, PromptTemplate]:
             version="v1",
             system_prompt=settings.PROMPT_TOOL_ASSISTANT_SYSTEM,
         ),
+        "research_agent_planner_v1": PromptTemplate(
+            name="research_agent_planner",
+            version="v1",
+            system_prompt=settings.PROMPT_RESEARCH_AGENT_PLANNER_SYSTEM,
+        ),
+        "research_agent_v1": PromptTemplate(
+            name="research_agent",
+            version="v1",
+            system_prompt=settings.PROMPT_RESEARCH_AGENT_SYSTEM,
+        ),
+        "research_agent_critic_v1": PromptTemplate(
+            name="research_agent_critic",
+            version="v1",
+            system_prompt=settings.PROMPT_RESEARCH_AGENT_CRITIC_SYSTEM,
+        ),
     }
 
 

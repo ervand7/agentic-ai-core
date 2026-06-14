@@ -3,7 +3,10 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
-from app.domains.ai_tasks.api.dependencies import get_ai_tasks_service
+from app.domains.ai_tasks.api.dependencies import (
+    get_ai_tasks_service,
+    get_research_agent_service,
+)
 from app.domains.ai_tasks.api.schemas import (
     AnalyzeTextRequest,
     AnalyzeTextResponse,
@@ -13,6 +16,8 @@ from app.domains.ai_tasks.api.schemas import (
     ClassifyResponse,
     ExtractKeywordsRequest,
     ExtractKeywordsResponse,
+    ResearchAgentRequest,
+    ResearchAgentResponse,
     SummarizeRequest,
     SummarizeResponse,
     ToolAssistantRequest,
@@ -20,6 +25,7 @@ from app.domains.ai_tasks.api.schemas import (
     TranslateRequest,
     TranslateResponse,
 )
+from app.domains.ai_tasks.application.agent_service import ResearchAgentService
 from app.domains.ai_tasks.application.services import AITasksService
 
 router = APIRouter(tags=["ai"])
@@ -116,3 +122,17 @@ async def tool_assistant(
 ) -> ToolAssistantResponse:
     """Let the model choose and call safe backend tools."""
     return await service.tool_assistant(payload.message, request.state.request_id)
+
+
+@router.post("/research-agent", response_model=ResearchAgentResponse)
+async def research_agent(
+    payload: ResearchAgentRequest,
+    request: Request,
+    service: ResearchAgentService = Depends(get_research_agent_service),
+) -> ResearchAgentResponse:
+    """Run the multistep research agent and return a report plus its trace."""
+    return await service.run(
+        payload.topic,
+        request.state.request_id,
+        max_iterations=payload.max_iterations,
+    )

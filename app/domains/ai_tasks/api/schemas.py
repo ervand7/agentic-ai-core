@@ -124,3 +124,39 @@ class ToolAssistantResponse(BaseModel):
     model: str
     tokens_used: int
     prompt_version: str
+
+
+class ResearchAgentRequest(BaseModel):
+    """Incoming request for the multistep research agent."""
+
+    topic: str = Field(..., min_length=1, description="Topic to research")
+    max_iterations: int | None = Field(
+        default=None,
+        ge=1,
+        le=10,
+        description="Optional override for the agent loop iteration cap",
+    )
+
+
+class AgentIterationResult(BaseModel):
+    """One step of the agent loop: the model's thought plus any tool calls."""
+
+    iteration: int
+    thought: str = ""
+    tool_calls: list[ToolExecutionResult] = Field(default_factory=list)
+
+
+class ResearchAgentResponse(BaseModel):
+    """Final report plus a full, auditable trace of how it was produced."""
+
+    topic: str
+    report: str
+    plan: list[str] = Field(default_factory=list)
+    iterations: list[AgentIterationResult] = Field(default_factory=list)
+    tool_calls: list[ToolExecutionResult] = Field(default_factory=list)
+    critique: str | None = None
+    stop_reason: str
+    iterations_used: int
+    model: str
+    tokens_used: int
+    prompt_version: str

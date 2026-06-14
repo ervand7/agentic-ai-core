@@ -440,6 +440,28 @@ pre.code {
 }
 @keyframes blink { 50% { opacity: 0; } }
 
+/* ---------- Research agent ---------- */
+.agent-plan {
+  margin: 6px 0 4px;
+  padding-left: 22px;
+  color: #c8cee0;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.agent-plan li { margin: 2px 0; }
+
+.tool-call {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.tool-call .code {
+  margin-top: 8px;
+  max-height: 220px;
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 980px) {
   .app { grid-template-columns: 1fr; }

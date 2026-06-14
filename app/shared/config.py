@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     RAG_TEMPERATURE: float = Field(default=0.1, ge=0.0, le=2.0)
     RAG_MAX_TOKENS: int = Field(default=500, ge=1)
 
+    AGENT_MAX_ITERATIONS: int = Field(default=6, ge=1, le=20)
+    AGENT_MAX_TOTAL_TOKENS: int = Field(default=12_000, ge=1)
+    AGENT_TEMPERATURE: float = Field(default=0.1, ge=0.0, le=2.0)
+    AGENT_PLAN_MAX_TOKENS: int = Field(default=400, ge=1)
+    AGENT_REPORT_MAX_TOKENS: int = Field(default=800, ge=1)
+    AGENT_CRITIC_MAX_TOKENS: int = Field(default=1_200, ge=1)
+    AGENT_ENABLE_REFLECTION: bool = Field(default=True)
+
     PROMPT_ASK_SYSTEM: str = Field(
         default="You are a helpful assistant. Give clear and concise answers.",
         min_length=1,
@@ -91,6 +99,39 @@ class Settings(BaseSettings):
             "Never claim that a ticket was filed or an email was sent; ticket and "
             "email tools only create drafts that require human confirmation. "
             "Summarize tool results clearly for the user."
+        ),
+        min_length=1,
+    )
+    PROMPT_RESEARCH_AGENT_PLANNER_SYSTEM: str = Field(
+        default=(
+            "You are a research planner. Given a topic, produce a short ordered "
+            "plan of concrete research steps (3-6 steps). Each step should be a "
+            "single actionable instruction, such as searching the documents for a "
+            "specific sub-question. Return only valid JSON that matches the schema."
+        ),
+        min_length=1,
+    )
+    PROMPT_RESEARCH_AGENT_SYSTEM: str = Field(
+        default=(
+            "You are a research agent. Your goal is to research the user's topic "
+            "using ONLY the provided tools and then write a grounded final report. "
+            "Think step by step: decide what you still need to know, call a tool to "
+            "find it, read the result, and repeat. Prefer the search_docs tool to "
+            "gather evidence. Do not call tools that are not needed. When you have "
+            "enough evidence, stop calling tools and write the report, citing the "
+            "documents you used. Never fabricate sources or facts; if the documents "
+            "lack the answer, say so. Ticket and email tools only create drafts that "
+            "require human confirmation, so never claim an action was actually taken."
+        ),
+        min_length=1,
+    )
+    PROMPT_RESEARCH_AGENT_CRITIC_SYSTEM: str = Field(
+        default=(
+            "You are a meticulous research critic. You review a draft report against "
+            "its topic and judge it for factual support, relevance, and completeness. "
+            "Be strict but fair. Return only valid JSON that matches the schema: set "
+            "approved=true only when the report is solid; otherwise list concrete "
+            "issues and provide an improved revised_answer."
         ),
         min_length=1,
     )

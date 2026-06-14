@@ -43,6 +43,34 @@ _KEYWORDS_JSON_SCHEMA: JSONSchema = {
     },
 }
 
+_RESEARCH_PLAN_JSON_SCHEMA: JSONSchema = {
+    "name": "research_plan",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "steps": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["steps"],
+        "additionalProperties": False,
+    },
+}
+
+_AGENT_CRITIQUE_JSON_SCHEMA: JSONSchema = {
+    "name": "agent_critique",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "approved": {"type": "boolean"},
+            "issues": {"type": "array", "items": {"type": "string"}},
+            "revised_answer": {"type": "string"},
+        },
+        "required": ["approved", "issues", "revised_answer"],
+        "additionalProperties": False,
+    },
+}
+
 _ANALYZE_TEXT_JSON_SCHEMA: JSONSchema = {
     "name": "analyze_text_response",
     "strict": True,
@@ -67,6 +95,16 @@ CLASSIFY_RESPONSE_FORMAT: ResponseFormatJSONSchema = {
     "json_schema": _CLASSIFY_JSON_SCHEMA,
 }
 
+RESEARCH_PLAN_RESPONSE_FORMAT: ResponseFormatJSONSchema = {
+    "type": "json_schema",
+    "json_schema": _RESEARCH_PLAN_JSON_SCHEMA,
+}
+
+AGENT_CRITIQUE_RESPONSE_FORMAT: ResponseFormatJSONSchema = {
+    "type": "json_schema",
+    "json_schema": _AGENT_CRITIQUE_JSON_SCHEMA,
+}
+
 KEYWORDS_RESPONSE_FORMAT: ResponseFormatJSONSchema = {
     "type": "json_schema",
     "json_schema": _KEYWORDS_JSON_SCHEMA,
@@ -78,7 +116,9 @@ ANALYZE_TEXT_RESPONSE_FORMAT: ResponseFormatJSONSchema = {
 }
 
 __all__ = [
+    "AGENT_CRITIQUE_RESPONSE_FORMAT",
     "ANALYZE_TEXT_RESPONSE_FORMAT",
     "CLASSIFY_RESPONSE_FORMAT",
     "KEYWORDS_RESPONSE_FORMAT",
+    "RESEARCH_PLAN_RESPONSE_FORMAT",
 ]

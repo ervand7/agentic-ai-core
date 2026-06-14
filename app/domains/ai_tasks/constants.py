@@ -1,10 +1,3 @@
-"""Stable endpoint/task name constants for the AI tasks bounded context.
-
-These string labels are shared between the HTTP routes and the application
-services (where they are passed to the LLM provider for logging), so keeping
-them in one place avoids drift between the two.
-"""
-
 from typing import Final
 
 
@@ -19,6 +12,9 @@ class Endpoint:
     TRANSLATE: Final[str] = "translate"
     ANALYZE_TEXT: Final[str] = "analyze-text"
     TOOL_ASSISTANT: Final[str] = "tool-assistant"
+    RESEARCH_AGENT: Final[str] = "research-agent"
+    RESEARCH_AGENT_PLAN: Final[str] = "research-agent-plan"
+    RESEARCH_AGENT_CRITIC: Final[str] = "research-agent-critic"
 
 
 __all__ = ["Endpoint"]

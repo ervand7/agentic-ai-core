@@ -6,12 +6,17 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from app.domains.ai_tasks.api.dependencies import get_ai_tasks_service
+from app.domains.ai_tasks.api.dependencies import (
+    get_ai_tasks_service,
+    get_research_agent_service,
+)
 from app.domains.ai_tasks.api.schemas import (
+    AgentIterationResult,
     AnalyzeTextResponse,
     AskResponse,
     ClassifyResponse,
     ExtractKeywordsResponse,
+    ResearchAgentResponse,
     SummarizeResponse,
     ToolAssistantResponse,
     ToolExecutionResult,
@@ -96,6 +101,43 @@ def ai_tasks_service() -> MagicMock:
     return mock
 
 
+def _agent_response(topic: str) -> ResearchAgentResponse:
+    tool_call = ToolExecutionResult(
+        name="search_docs",
+        arguments={"query": topic},
+        result={"results": []},
+    )
+    return ResearchAgentResponse(
+        topic=topic,
+        report=f"report:{topic}",
+        plan=["step one", "step two"],
+        iterations=[
+            AgentIterationResult(iteration=1, thought="", tool_calls=[tool_call]),
+            AgentIterationResult(iteration=2, thought="done", tool_calls=[]),
+        ],
+        tool_calls=[tool_call],
+        critique="No issues found.",
+        stop_reason="completed",
+        iterations_used=2,
+        model="m",
+        tokens_used=42,
+        prompt_version="research_agent_v1",
+    )
+
+
+@pytest.fixture
+def research_agent_service() -> MagicMock:
+    """Mocked ``ResearchAgentService`` injected via dependency override."""
+    mock = MagicMock()
+    mock.run = AsyncMock(
+        side_effect=lambda topic, request_id, max_iterations=None: _agent_response(
+            topic
+        )
+    )
+    app.dependency_overrides[get_research_agent_service] = lambda: mock
+    return mock
+
+
 def test_health_endpoint(client):
     resp = client.get("/health")
     assert resp.status_code == 200
@@ -162,6 +204,32 @@ class TestOtherTasks:
         assert body["answer"] == "tool answer"
         assert body["tool_calls"][0]["name"] == "get_weather"
         ai_tasks_service.tool_assistant.assert_awaited_once()
+
+
+class TestResearchAgent:
+    def test_research_agent_returns_report_and_trace(
+        self, client, research_agent_service
+    ):
+        resp = client.post("/research-agent", json={"topic": "retry logic"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["report"] == "report:retry logic"
+        assert body["plan"] == ["step one", "step two"]
+        assert body["stop_reason"] == "completed"
+        assert body["iterations"][0]["tool_calls"][0]["name"] == "search_docs"
+        research_agent_service.run.assert_awaited_once()
+
+    def test_research_agent_validation_error_on_empty_topic(
+        self, client, research_agent_service
+    ):
+        resp = client.post("/research-agent", json={"topic": ""})
+        assert resp.status_code == 422
+        research_agent_service.run.assert_not_awaited()
+
+    def test_research_agent_passes_max_iterations(self, client, research_agent_service):
+        resp = client.post("/research-agent", json={"topic": "x", "max_iterations": 3})
+        assert resp.status_code == 200
+        assert research_agent_service.run.await_args.kwargs["max_iterations"] == 3
 
 
 class TestErrorMapping:

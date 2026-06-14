@@ -167,13 +167,13 @@ class ToolRunner:
             self, name: str, arguments: dict[str, Any], request_id: str
     ) -> dict[str, Any]:
         if name == GET_WEATHER_TOOL_NAME:
-            args = GetWeatherArgs.model_validate(arguments)
+            weather_args = GetWeatherArgs.model_validate(arguments)
             base_celsius = WEATHER_BASE_CELSIUS + (
-                    _stable_int(args.location.lower()) % WEATHER_VARIATION_RANGE
+                    _stable_int(weather_args.location.lower()) % WEATHER_VARIATION_RANGE
             )
             temperature = (
                 base_celsius
-                if args.unit == "celsius"
+                if weather_args.unit == "celsius"
                 else round(
                     (base_celsius * FAHRENHEIT_MULTIPLIER / FAHRENHEIT_DIVISOR)
                     + FAHRENHEIT_OFFSET,
@@ -181,15 +181,15 @@ class ToolRunner:
                 )
             )
             return {
-                "location": args.location,
+                "location": weather_args.location,
                 "temperature": temperature,
-                "unit": args.unit,
+                "unit": weather_args.unit,
                 "condition": "partly cloudy",
                 "source": "mock_weather_tool",
             }
 
         if name == SEARCH_DOCS_TOOL_NAME:
-            args = SearchDocsArgs.model_validate(arguments)
+            search_args = SearchDocsArgs.model_validate(arguments)
             if self._document_search is None:
                 return {
                     "error": "Document search service is not configured.",
@@ -197,11 +197,11 @@ class ToolRunner:
                 }
             try:
                 response = await self._document_search.execute(
-                    query=args.query,
-                    top_k=args.top_k,
-                    filename=args.filename,
-                    keyword=args.keyword,
-                    min_similarity=args.min_similarity,
+                    query=search_args.query,
+                    top_k=search_args.top_k,
+                    filename=search_args.filename,
+                    keyword=search_args.keyword,
+                    min_similarity=search_args.min_similarity,
                     request_id=request_id,
                 )
             except EmptyVectorStoreError as exc:
@@ -219,27 +219,29 @@ class ToolRunner:
             }
 
         if name == CREATE_TICKET_TOOL_NAME:
-            args = CreateTicketArgs.model_validate(arguments)
-            draft_number = _stable_int(args.title) % DRAFT_ID_MODULUS
+            ticket_args = CreateTicketArgs.model_validate(arguments)
+            draft_number = _stable_int(ticket_args.title) % DRAFT_ID_MODULUS
             draft_id = f"TICKET-DRAFT-{draft_number:0{DRAFT_ID_WIDTH}d}"
             return {
                 "draft_id": draft_id,
-                "title": args.title,
-                "description": args.description,
-                "priority": args.priority,
+                "title": ticket_args.title,
+                "description": ticket_args.description,
+                "priority": ticket_args.priority,
                 "status": "draft_created",
                 "requires_human_confirmation": True,
             }
 
         if name == SEND_EMAIL_DRAFT_TOOL_NAME:
-            args = SendEmailDraftArgs.model_validate(arguments)
-            draft_number = _stable_int(args.to + args.subject) % DRAFT_ID_MODULUS
+            email_args = SendEmailDraftArgs.model_validate(arguments)
+            draft_number = (
+                _stable_int(email_args.to + email_args.subject) % DRAFT_ID_MODULUS
+            )
             draft_id = f"EMAIL-DRAFT-{draft_number:0{DRAFT_ID_WIDTH}d}"
             return {
                 "draft_id": draft_id,
-                "to": args.to,
-                "subject": args.subject,
-                "body": args.body,
+                "to": email_args.to,
+                "subject": email_args.subject,
+                "body": email_args.body,
                 "status": "draft_created",
                 "sent": False,
                 "requires_human_confirmation": True,

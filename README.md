@@ -28,6 +28,7 @@
 | --- | --- |
 | **LLM text tools** | Ask, streaming Ask, classify (sentiment), summarize, extract keywords, translate, full text analysis |
 | **Tool calling** | Model-selected tools for mock weather, document search, ticket drafts, and email drafts |
+| **Research agent** | Goal-driven `plan → act → observe` loop with hard iteration/token budgets, self-critique, and a full execution trace |
 | **Semantic search** | Embed-and-search over uploaded docs, similarity scores, top-K control |
 | **Hybrid search** | Vector + keyword matching, filename filtering, min-similarity threshold |
 | **RAG** | Grounded answers with numbered citations + graceful abstention |
@@ -54,6 +55,7 @@
 | `POST` | `/translate` | Translate text to a target language |
 | `POST` | `/analyze-text` | Combined summary + sentiment + keywords + language |
 | `POST` | `/tool-assistant` | Assistant that can call safe backend tools |
+| `POST` | `/research-agent` | Multi-step research agent: returns a report plus its full trace |
 
 ### Semantic search & RAG (`documents`)
 
@@ -131,6 +133,9 @@ All settings are read from environment variables / `.env` and validated by `pyda
 | `DOCUMENT_CHUNK_SIZE` / `DOCUMENT_CHUNK_OVERLAP` | Chunking behaviour | `500` / `100` |
 | `RAG_TOP_K` / `RAG_MIN_SIMILARITY` | Retrieval tuning | `4` / `0.2` |
 | `RAG_TEMPERATURE` / `RAG_MAX_TOKENS` | Answer generation | `0.1` / `500` |
+| `AGENT_MAX_ITERATIONS` / `AGENT_MAX_TOTAL_TOKENS` | Research-agent safety budgets | `6` / `12000` |
+| `AGENT_TEMPERATURE` / `AGENT_REPORT_MAX_TOKENS` | Agent sampling + final report size | `0.1` / `800` |
+| `AGENT_ENABLE_REFLECTION` | Run the agent's self-critique pass | `true` |
 | `PROMPT_*_SYSTEM` | Tunable system prompts per task | sensible defaults |
 
 > Prompts are versioned in `app/domains/ai_tasks/domain/prompts.py`. Bump a prompt's `version` when you change its wording meaningfully. `python-multipart` (file uploads) and `pypdf` (PDF parsing) are included in `pyproject.toml`.

@@ -1,16 +1,7 @@
-"""
-Application services (use cases) for the AI tasks bounded context.
-
-These services orchestrate the domain by calling the LLMProvider port.
-They are deliberately ignorant of HTTP and of the concrete LLM provider.
-"""
-
 from __future__ import annotations
 
-import json
 from collections.abc import AsyncGenerator
-from json import JSONDecodeError
-from typing import Any, Optional, cast
+from typing import Optional
 
 from openai.types.chat import (
     ChatCompletionSystemMessageParam,
@@ -27,6 +18,11 @@ from app.domains.ai_tasks.api.schemas import (
     ToolExecutionResult,
     TranslateResponse,
 )
+from app.domains.ai_tasks.application.conversation import (
+    assistant_tool_call_message,
+    parse_json_content,
+    tool_result_message,
+)
 from app.domains.ai_tasks.application.tool_runner import ToolRunner
 from app.domains.ai_tasks.constants import Endpoint
 from app.domains.ai_tasks.domain.prompts import get_prompts
@@ -39,12 +35,11 @@ from app.domains.ai_tasks.domain.response_formats import (
 from app.domains.ai_tasks.domain.tools import TOOL_DEFINITIONS
 from app.domains.documents.application.services import SearchDocumentsService
 from app.shared.config import Settings
-from app.shared.exceptions import LLMServiceError
 from app.shared.openai_types import ChatCompletionMessageParam
 
 
 def _build_messages(
-    user_input: str, prompt_key: str
+        user_input: str, prompt_key: str
 ) -> list[ChatCompletionMessageParam]:
     """Create system+user messages from the prompt registry."""
     prompt = get_prompts()[prompt_key]
@@ -59,23 +54,15 @@ def _build_messages(
     return [system_message, user_message]
 
 
-def _parse_json_content(content: str) -> dict:
-    """Protect routes from malformed model JSON output."""
-    try:
-        return json.loads(content or "{}")
-    except JSONDecodeError as exc:
-        raise LLMServiceError("Model returned invalid JSON output.") from exc
-
-
 class AITasksService:
     """All AI task use cases grouped behind a single application service."""
 
     def __init__(
-        self,
-        llm_provider: LLMProvider,
-        settings: Settings,
-        document_search: Optional[SearchDocumentsService] = None,
-        tool_runner: Optional[ToolRunner] = None,
+            self,
+            llm_provider: LLMProvider,
+            settings: Settings,
+            document_search: Optional[SearchDocumentsService] = None,
+            tool_runner: Optional[ToolRunner] = None,
     ):
         self._llm = llm_provider
         self._settings = settings
@@ -95,13 +82,13 @@ class AITasksService:
         )
 
     async def ask_stream(
-        self, question: str, request_id: str
+            self, question: str, request_id: str
     ) -> AsyncGenerator[str, None]:
         """Stream tokens token-by-token for chat-like UIs."""
         async for chunk in self._llm.stream(
-            endpoint=Endpoint.ASK_STREAM,
-            request_id=request_id,
-            messages=_build_messages(question, "ask_stream_v1"),
+                endpoint=Endpoint.ASK_STREAM,
+                request_id=request_id,
+                messages=_build_messages(question, "ask_stream_v1"),
         ):
             if chunk.content:
                 yield chunk.content
@@ -115,7 +102,7 @@ class AITasksService:
             temperature=self._settings.OPENAI_TEMPERATURE_CLASSIFY,
             response_format=CLASSIFY_RESPONSE_FORMAT,
         )
-        raw = _parse_json_content(result.content)
+        raw = parse_json_content(result.content)
         return ClassifyResponse.model_validate(raw)
 
     async def summarize(self, text: str, request_id: str) -> SummarizeResponse:
@@ -133,7 +120,7 @@ class AITasksService:
         )
 
     async def extract_keywords(
-        self, text: str, request_id: str
+            self, text: str, request_id: str
     ) -> ExtractKeywordsResponse:
         """Extract relevant terms as a JSON list."""
         result = await self._llm.complete(
@@ -143,7 +130,7 @@ class AITasksService:
             temperature=self._settings.OPENAI_TEMPERATURE_EXTRACT_KEYWORDS,
             response_format=KEYWORDS_RESPONSE_FORMAT,
         )
-        raw_data = _parse_json_content(result.content)
+        raw_data = parse_json_content(result.content)
         return ExtractKeywordsResponse(
             keywords=raw_data.get("keywords", []),
             model=result.model,
@@ -151,7 +138,7 @@ class AITasksService:
         )
 
     async def translate(
-        self, text: str, target_language: str, request_id: str
+            self, text: str, target_language: str, request_id: str
     ) -> TranslateResponse:
         """Translate text to a target language."""
         prompt = get_prompts()["translate_v1"]
@@ -192,7 +179,7 @@ class AITasksService:
             temperature=self._settings.OPENAI_TEMPERATURE_ANALYZE_TEXT,
             response_format=ANALYZE_TEXT_RESPONSE_FORMAT,
         )
-        raw_data = _parse_json_content(result.content)
+        raw_data = parse_json_content(result.content)
         return AnalyzeTextResponse.model_validate(
             {
                 **raw_data,
@@ -203,7 +190,7 @@ class AITasksService:
         )
 
     async def tool_assistant(
-        self, message: str, request_id: str
+            self, message: str, request_id: str
     ) -> ToolAssistantResponse:
         """Let the model choose safe backend tools, then summarize their results."""
         messages = _build_messages(message, "tool_assistant_v1")
@@ -225,37 +212,15 @@ class AITasksService:
             )
 
         executed_tools: list[ToolExecutionResult] = []
-        assistant_tool_call_message = {
-            "role": "assistant",
-            "content": first.content or None,
-            "tool_calls": [
-                {
-                    "id": call.id,
-                    "type": "function",
-                    "function": {
-                        "name": call.name,
-                        "arguments": call.arguments,
-                    },
-                }
-                for call in first.tool_calls
-            ],
-        }
-        follow_up_messages = [
+        follow_up_messages: list[ChatCompletionMessageParam] = [
             *messages,
-            cast(ChatCompletionMessageParam, cast(object, assistant_tool_call_message)),
+            assistant_tool_call_message(first),
         ]
 
         for call in first.tool_calls:
             execution = await self._tool_runner.execute(call, request_id=request_id)
             executed_tools.append(execution)
-            tool_result_message = {
-                "role": "tool",
-                "tool_call_id": call.id,
-                "content": json.dumps(execution.result),
-            }
-            follow_up_messages.append(
-                cast(ChatCompletionMessageParam, cast(object, tool_result_message))
-            )
+            follow_up_messages.append(tool_result_message(call.id, execution.result))
 
         final = await self._llm.complete(
             endpoint=Endpoint.TOOL_ASSISTANT,

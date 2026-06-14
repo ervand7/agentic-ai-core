@@ -160,6 +160,15 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {spec.name: spec for spec in TOOL_SPECS}
 TOOL_DEFINITIONS: list[dict[str, Any]] = [spec.definition for spec in TOOL_SPECS]
 
 
+RESEARCH_TOOL_NAMES: tuple[str, ...] = ("search_docs", "create_ticket")
+RESEARCH_TOOL_SPECS: tuple[ToolSpec, ...] = tuple(
+    spec for spec in TOOL_SPECS if spec.name in RESEARCH_TOOL_NAMES
+)
+RESEARCH_TOOL_DEFINITIONS: list[dict[str, Any]] = [
+    spec.definition for spec in RESEARCH_TOOL_SPECS
+]
+
+
 class GetWeatherArgs(BaseModel):
     location: str = Field(..., min_length=1)
     unit: Literal["celsius", "fahrenheit"] = "celsius"
@@ -188,6 +197,9 @@ class SendEmailDraftArgs(BaseModel):
 __all__ = [
     "CreateTicketArgs",
     "GetWeatherArgs",
+    "RESEARCH_TOOL_DEFINITIONS",
+    "RESEARCH_TOOL_NAMES",
+    "RESEARCH_TOOL_SPECS",
     "SearchDocsArgs",
     "SendEmailDraftArgs",
     "TOOL_DEFINITIONS",
