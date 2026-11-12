@@ -52,13 +52,13 @@ class ResearchAgentService:
     """Goal-driven agent that researches a topic and writes a final report."""
 
     def __init__(
-            self,
-            *,
-            llm_provider: LLMProvider,
-            settings: Settings,
-            document_search: Optional[SearchDocumentsService] = None,
-            tool_runner: Optional[ToolRunner] = None,
-            tools: Optional[list[dict[str, Any]]] = None,
+        self,
+        *,
+        llm_provider: LLMProvider,
+        settings: Settings,
+        document_search: Optional[SearchDocumentsService] = None,
+        tool_runner: Optional[ToolRunner] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
     ):
         self._llm = llm_provider
         self._settings = settings
@@ -66,11 +66,11 @@ class ResearchAgentService:
         self._tools = tools if tools is not None else RESEARCH_TOOL_DEFINITIONS
 
     async def run(
-            self,
-            topic: str,
-            request_id: str,
-            *,
-            max_iterations: Optional[int] = None,
+        self,
+        topic: str,
+        request_id: str,
+        *,
+        max_iterations: Optional[int] = None,
     ) -> ResearchAgentResponse:
         """Run the full agent: plan, loop, (force final), reflect, report."""
         budget = AgentBudget(
@@ -125,7 +125,7 @@ class ResearchAgentService:
         )
 
     async def _plan(
-            self, topic: str, request_id: str, state: AgentState
+        self, topic: str, request_id: str, state: AgentState
     ) -> ResearchPlan:
         """Ask the model for an ordered research plan (structured output)."""
         prompt = get_prompts()[PLANNER_PROMPT_KEY]
@@ -164,7 +164,7 @@ class ResearchAgentService:
         return plan if plan.steps else fallback
 
     def _initial_messages(
-            self, topic: str, plan: ResearchPlan
+        self, topic: str, plan: ResearchPlan
     ) -> list[ChatCompletionMessageParam]:
         """Seed the loop with the agent system prompt + topic + plan."""
         prompt = get_prompts()[AGENT_PROMPT_KEY]
@@ -191,12 +191,12 @@ class ResearchAgentService:
         return [system_message, user_message]
 
     async def _run_loop(
-            self,
-            messages: list[ChatCompletionMessageParam],
-            state: AgentState,
-            request_id: str,
-            tool_executions: list[ToolExecutionResult],
-            iterations: list[AgentIterationResult],
+        self,
+        messages: list[ChatCompletionMessageParam],
+        state: AgentState,
+        request_id: str,
+        tool_executions: list[ToolExecutionResult],
+        iterations: list[AgentIterationResult],
     ) -> None:
         """The agent loop: reason -> act -> observe, bounded by the budget."""
         while True:
@@ -245,10 +245,10 @@ class ResearchAgentService:
             )
 
     async def _force_final_report(
-            self,
-            messages: list[ChatCompletionMessageParam],
-            state: AgentState,
-            request_id: str,
+        self,
+        messages: list[ChatCompletionMessageParam],
+        state: AgentState,
+        request_id: str,
     ) -> None:
         """Synthesize a best-effort report after a budget cut (no more tools)."""
         wrap_up: ChatCompletionUserMessageParam = {

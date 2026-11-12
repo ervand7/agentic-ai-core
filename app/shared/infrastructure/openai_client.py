@@ -51,13 +51,13 @@ class OpenAIClient:
         return self.settings.OPENAI_MAX_TOKENS if max_tokens is None else max_tokens
 
     def _build_non_streaming_params(
-            self,
-            messages: list[ChatCompletionMessageParam],
-            response_format: Optional[ResponseFormat],
-            temperature: Optional[float],
-            max_tokens: Optional[int],
-            tools: Optional[list[dict[str, Any]]] = None,
-            tool_choice: Optional[str] = None,
+        self,
+        messages: list[ChatCompletionMessageParam],
+        response_format: Optional[ResponseFormat],
+        temperature: Optional[float],
+        max_tokens: Optional[int],
+        tools: Optional[list[dict[str, Any]]] = None,
+        tool_choice: Optional[str] = None,
     ) -> dict[str, Any]:
         """Build a typed request body so static checkers resolve the non-stream overload."""
         params: dict[str, Any] = {
@@ -74,10 +74,10 @@ class OpenAIClient:
         return params
 
     def _build_streaming_params(
-            self,
-            messages: list[ChatCompletionMessageParam],
-            temperature: Optional[float],
-            max_tokens: Optional[int],
+        self,
+        messages: list[ChatCompletionMessageParam],
+        temperature: Optional[float],
+        max_tokens: Optional[int],
     ) -> CompletionCreateParamsStreaming:
         """Build a typed request body so static checkers resolve the stream overload."""
         stream_options: ChatCompletionStreamOptionsParam = {"include_usage": True}
@@ -91,16 +91,16 @@ class OpenAIClient:
         }
 
     async def create_chat_completion(
-            self,
-            *,
-            endpoint: str,
-            request_id: str,
-            messages: list[ChatCompletionMessageParam],
-            response_format: Optional[ResponseFormat] = None,
-            temperature: Optional[float] = None,
-            max_tokens: Optional[int] = None,
-            tools: Optional[list[dict[str, Any]]] = None,
-            tool_choice: Optional[str] = None,
+        self,
+        *,
+        endpoint: str,
+        request_id: str,
+        messages: list[ChatCompletionMessageParam],
+        response_format: Optional[ResponseFormat] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        tools: Optional[list[dict[str, Any]]] = None,
+        tool_choice: Optional[str] = None,
     ) -> ChatCompletion:
         """
         Execute a chat completion with retries and exponential backoff.
@@ -201,13 +201,13 @@ class OpenAIClient:
         raise LLMServiceError("AI provider returned an unexpected error.")
 
     async def create_chat_completion_stream(
-            self,
-            *,
-            endpoint: str,
-            request_id: str,
-            messages: list[ChatCompletionMessageParam],
-            temperature: Optional[float] = None,
-            max_tokens: Optional[int] = None,
+        self,
+        *,
+        endpoint: str,
+        request_id: str,
+        messages: list[ChatCompletionMessageParam],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
     ) -> AsyncStream[ChatCompletionChunk]:
         """Create a streaming completion with the same retry behavior."""
         max_retries = self.settings.OPENAI_MAX_RETRIES
@@ -258,12 +258,12 @@ class OpenAIClient:
         raise LLMServiceError("AI provider returned an unexpected error.")
 
     async def create_embedding(
-            self,
-            *,
-            endpoint: str,
-            request_id: str,
-            text: str,
-            model: Optional[str] = None,
+        self,
+        *,
+        endpoint: str,
+        request_id: str,
+        text: str,
+        model: Optional[str] = None,
     ) -> list[float]:
         """Generate one embedding vector with retries and friendly errors."""
         max_retries = self.settings.OPENAI_MAX_RETRIES
@@ -327,14 +327,14 @@ class OpenAIClient:
 
     @staticmethod
     async def _retry_sleep(
-            attempt: int,
-            base_delay: float,
-            request_id: str,
-            endpoint: str,
-            error: Exception,
+        attempt: int,
+        base_delay: float,
+        request_id: str,
+        endpoint: str,
+        error: Exception,
     ) -> None:
         """Sleep using exponential backoff: base, base*2, base*4, ..."""
-        delay = base_delay * (2 ** attempt)
+        delay = base_delay * (2**attempt)
         logger.warning(
             "openai_retry request_id=%s endpoint=%s attempt=%s delay_s=%.2f error=%s",
             request_id,

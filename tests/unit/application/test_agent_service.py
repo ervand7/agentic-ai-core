@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.domains.ai_tasks.application.agent_service import ResearchAgentService
+from app.domains.ai_tasks.application.research_agent_service import ResearchAgentService
 from app.domains.ai_tasks.constants import Endpoint
 from app.domains.ai_tasks.domain.ports import (
     CompletionResult,

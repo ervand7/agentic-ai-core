@@ -2,8 +2,8 @@
 
 from functools import lru_cache
 
-from app.domains.ai_tasks.application.agent_service import ResearchAgentService
-from app.domains.ai_tasks.application.services import AITasksService
+from app.domains.ai_tasks.application.research_agent_service import ResearchAgentService
+from app.domains.ai_tasks.application.ai_tasks_service import AITasksService
 from app.domains.ai_tasks.infrastructure.openai_llm_provider import OpenAILLMProvider
 from app.domains.documents.api.dependencies import get_search_documents_service
 from app.shared.config import get_settings

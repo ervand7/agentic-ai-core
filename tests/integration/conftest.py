@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.domains.ai_tasks.api.dependencies import get_ai_tasks_service
-from app.domains.ai_tasks.application.services import AITasksService
+from app.domains.ai_tasks.application.ai_tasks_service import AITasksService
 from app.domains.documents.api.dependencies import (
     get_answer_question_service,
     get_ingest_document_service,

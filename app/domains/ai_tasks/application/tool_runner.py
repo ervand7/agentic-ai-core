@@ -87,20 +87,20 @@ class ToolRunner:
     """Validate, authorize, execute, and audit tool calls."""
 
     def __init__(
-            self,
-            *,
-            document_search: Optional[SearchDocumentsService] = None,
-            registry: Optional[dict[str, ToolSpec]] = None,
+        self,
+        *,
+        document_search: Optional[SearchDocumentsService] = None,
+        registry: Optional[dict[str, ToolSpec]] = None,
     ):
         self._document_search = document_search
         self._registry = registry or TOOL_REGISTRY
 
     async def execute(
-            self,
-            call: ToolCall,
-            *,
-            request_id: str,
-            approved_tool_call_ids: Optional[set[str]] = None,
+        self,
+        call: ToolCall,
+        *,
+        request_id: str,
+        approved_tool_call_ids: Optional[set[str]] = None,
     ) -> ToolExecutionResult:
         spec = self._registry.get(call.name)
         if spec is None:
@@ -117,7 +117,7 @@ class ToolRunner:
             )
 
         approved = not spec.requires_approval or (
-                approved_tool_call_ids is not None and call.id in approved_tool_call_ids
+            approved_tool_call_ids is not None and call.id in approved_tool_call_ids
         )
         if not approved:
             return self._audit_result(
@@ -164,12 +164,12 @@ class ToolRunner:
             )
 
     async def _run(
-            self, name: str, arguments: dict[str, Any], request_id: str
+        self, name: str, arguments: dict[str, Any], request_id: str
     ) -> dict[str, Any]:
         if name == GET_WEATHER_TOOL_NAME:
             weather_args = GetWeatherArgs.model_validate(arguments)
             base_celsius = WEATHER_BASE_CELSIUS + (
-                    _stable_int(weather_args.location.lower()) % WEATHER_VARIATION_RANGE
+                _stable_int(weather_args.location.lower()) % WEATHER_VARIATION_RANGE
             )
             temperature = (
                 base_celsius
@@ -250,17 +250,17 @@ class ToolRunner:
         return {"error": f"Unknown tool: {name}"}
 
     def _audit_result(
-            self,
-            *,
-            call: ToolCall,
-            request_id: str,
-            arguments: dict[str, Any],
-            result: dict[str, Any],
-            risk: str,
-            requires_approval: bool,
-            approved: bool,
-            status: str,
-            error: Optional[str] = None,
+        self,
+        *,
+        call: ToolCall,
+        request_id: str,
+        arguments: dict[str, Any],
+        result: dict[str, Any],
+        risk: str,
+        requires_approval: bool,
+        approved: bool,
+        status: str,
+        error: Optional[str] = None,
     ) -> ToolExecutionResult:
         audit = ToolAuditRecord(
             request_id=request_id,

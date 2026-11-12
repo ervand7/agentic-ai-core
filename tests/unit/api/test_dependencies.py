@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.domains.ai_tasks.api import dependencies as ai_deps
-from app.domains.ai_tasks.application.services import AITasksService
+from app.domains.ai_tasks.application.ai_tasks_service import AITasksService
 from app.domains.documents.api import dependencies as doc_deps
 from app.domains.documents.application.services import (
     AnswerQuestionService,

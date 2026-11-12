@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.domains.ai_tasks.application.services import AITasksService
+from app.domains.ai_tasks.application.ai_tasks_service import AITasksService
 from app.domains.ai_tasks.constants import Endpoint
 from app.domains.ai_tasks.domain.ports import (
     CompletionResult,

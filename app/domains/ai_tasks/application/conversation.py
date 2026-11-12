@@ -21,7 +21,7 @@ def parse_json_content(content: str) -> dict[str, Any]:
 
 
 def assistant_tool_call_message(
-        result: ToolCompletionResult,
+    result: ToolCompletionResult,
 ) -> ChatCompletionMessageParam:
     """Rebuild the assistant turn that requested tool calls.
 
@@ -48,7 +48,7 @@ def assistant_tool_call_message(
 
 
 def tool_result_message(
-        tool_call_id: str, result: dict[str, Any]
+    tool_call_id: str, result: dict[str, Any]
 ) -> ChatCompletionMessageParam:
     """Wrap one tool's result as a ``tool`` message for the next turn."""
     message = {

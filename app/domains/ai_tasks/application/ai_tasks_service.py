@@ -39,7 +39,7 @@ from app.shared.openai_types import ChatCompletionMessageParam
 
 
 def _build_messages(
-        user_input: str, prompt_key: str
+    user_input: str, prompt_key: str
 ) -> list[ChatCompletionMessageParam]:
     """Create system+user messages from the prompt registry."""
     prompt = get_prompts()[prompt_key]
@@ -58,11 +58,11 @@ class AITasksService:
     """All AI task use cases grouped behind a single application service."""
 
     def __init__(
-            self,
-            llm_provider: LLMProvider,
-            settings: Settings,
-            document_search: Optional[SearchDocumentsService] = None,
-            tool_runner: Optional[ToolRunner] = None,
+        self,
+        llm_provider: LLMProvider,
+        settings: Settings,
+        document_search: Optional[SearchDocumentsService] = None,
+        tool_runner: Optional[ToolRunner] = None,
     ):
         self._llm = llm_provider
         self._settings = settings
@@ -82,13 +82,13 @@ class AITasksService:
         )
 
     async def ask_stream(
-            self, question: str, request_id: str
+        self, question: str, request_id: str
     ) -> AsyncGenerator[str, None]:
         """Stream tokens token-by-token for chat-like UIs."""
         async for chunk in self._llm.stream(
-                endpoint=Endpoint.ASK_STREAM,
-                request_id=request_id,
-                messages=_build_messages(question, "ask_stream_v1"),
+            endpoint=Endpoint.ASK_STREAM,
+            request_id=request_id,
+            messages=_build_messages(question, "ask_stream_v1"),
         ):
             if chunk.content:
                 yield chunk.content
@@ -120,7 +120,7 @@ class AITasksService:
         )
 
     async def extract_keywords(
-            self, text: str, request_id: str
+        self, text: str, request_id: str
     ) -> ExtractKeywordsResponse:
         """Extract relevant terms as a JSON list."""
         result = await self._llm.complete(
@@ -138,7 +138,7 @@ class AITasksService:
         )
 
     async def translate(
-            self, text: str, target_language: str, request_id: str
+        self, text: str, target_language: str, request_id: str
     ) -> TranslateResponse:
         """Translate text to a target language."""
         prompt = get_prompts()["translate_v1"]
@@ -190,7 +190,7 @@ class AITasksService:
         )
 
     async def tool_assistant(
-            self, message: str, request_id: str
+        self, message: str, request_id: str
     ) -> ToolAssistantResponse:
         """Let the model choose safe backend tools, then summarize their results."""
         messages = _build_messages(message, "tool_assistant_v1")

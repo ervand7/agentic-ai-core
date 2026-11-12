@@ -25,8 +25,8 @@ from app.domains.ai_tasks.api.schemas import (
     TranslateRequest,
     TranslateResponse,
 )
-from app.domains.ai_tasks.application.agent_service import ResearchAgentService
-from app.domains.ai_tasks.application.services import AITasksService
+from app.domains.ai_tasks.application.research_agent_service import ResearchAgentService
+from app.domains.ai_tasks.application.ai_tasks_service import AITasksService
 
 router = APIRouter(tags=["ai"])
 
