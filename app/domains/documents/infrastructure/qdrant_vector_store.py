@@ -1,7 +1,7 @@
 """Qdrant-backed implementation of the VectorStore port."""
 
 import logging
-from typing import Optional
+from typing import Any, Optional, cast
 from uuid import uuid4
 
 from qdrant_client import QdrantClient, models
@@ -138,7 +138,7 @@ class QdrantVectorStore(VectorStore):
 
         response = self._client.query_points(
             collection_name=self._collection_name,
-            query=query_embedding,
+            query=cast(Any, query_embedding),
             query_filter=query_filter,
             limit=candidate_limit,
             with_payload=True,

@@ -105,11 +105,14 @@ typecheck: ## Static type-check with mypy
 # ---------------------------------------------------------------------------
 # Aggregate / CI
 # ---------------------------------------------------------------------------
+.PHONY: all
+all: lint-fix lint format format-check typecheck test-unit test-api test-integration test test-cov test-cov-html test-watch ## Run every lint, format, typecheck, and test target
+
 .PHONY: check
-check: lint format-check typecheck test ## Run all checks (lint + format + types + tests)
+check: lint format-check typecheck test-cov ## Read-only gate: lint, format check, types, tests + coverage
 
 .PHONY: ci
-ci: install-dev check ## Install dev deps then run all checks (for CI)
+ci: install-dev check ## Install dev deps then run the read-only check gate (for CI)
 
 # ---------------------------------------------------------------------------
 # Docker
