@@ -2,8 +2,8 @@
 
 import pytest
 
-from app.domains.documents.application.services import (
-    EmptyVectorStoreError,
+from app.domains.documents.application.exceptions import EmptyVectorStoreError
+from app.domains.documents.application.search_documents_service import (
     SearchDocumentsService,
 )
 from app.domains.documents.domain.models import SearchHit, StoredChunk

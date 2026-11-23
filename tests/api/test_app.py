@@ -36,7 +36,7 @@ def test_openapi_lists_document_and_ai_routes(client):
 
 
 def test_document_error_handlers_registered():
-    from app.domains.documents.application.services import (
+    from app.domains.documents.application.exceptions import (
         DocumentValidationError,
         EmptyVectorStoreError,
     )

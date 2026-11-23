@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from app.domains.documents.api.dependencies import (
     get_answer_question_service,
     get_ingest_document_service,
+    get_langchain_answer_question_service,
     get_search_documents_service,
 )
 from app.domains.documents.api.schemas import (
@@ -15,9 +16,16 @@ from app.domains.documents.api.schemas import (
     DocumentSearchResponse,
     DocumentUploadResponse,
 )
-from app.domains.documents.application.services import (
+from app.domains.documents.application.answer_question_service import (
     AnswerQuestionService,
+)
+from app.domains.documents.application.ingest_document_service import (
     IngestDocumentService,
+)
+from app.domains.documents.application.langchain_answer_question_service import (
+    LangChainAnswerQuestionService,
+)
+from app.domains.documents.application.search_documents_service import (
     SearchDocumentsService,
 )
 from app.domains.documents.infrastructure.document_loader import (
@@ -83,6 +91,40 @@ async def ask_documents(
     service: AnswerQuestionService = Depends(get_answer_question_service),
 ) -> DocumentAskResponse:
     """Answer a question using RAG over the uploaded documents, with citations."""
+    result = await service.execute(
+        question=payload.question,
+        top_k=payload.top_k,
+        filename=payload.filename,
+        min_similarity=payload.min_similarity,
+        request_id=request.state.request_id,
+    )
+    return DocumentAskResponse(
+        question=payload.question,
+        answer=result.answer,
+        used_context=result.used_context,
+        citations=[
+            CitationResult(
+                index=citation.index,
+                filename=citation.filename,
+                text=citation.text,
+                similarity=round(citation.similarity, 4),
+            )
+            for citation in result.citations
+        ],
+        model=result.model,
+        tokens_used=result.tokens_used,
+    )
+
+
+@router.post("/ask-langchain", response_model=DocumentAskResponse)
+async def ask_documents_langchain(
+    payload: DocumentAskRequest,
+    request: Request,
+    service: LangChainAnswerQuestionService = Depends(
+        get_langchain_answer_question_service
+    ),
+) -> DocumentAskResponse:
+    """Same as `/documents/ask`, but the RAG pipeline is built with LangChain."""
     result = await service.execute(
         question=payload.question,
         top_k=payload.top_k,

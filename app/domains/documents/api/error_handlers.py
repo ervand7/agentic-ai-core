@@ -3,7 +3,7 @@
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from app.domains.documents.application.services import (
+from app.domains.documents.application.exceptions import (
     DocumentValidationError,
     EmptyVectorStoreError,
 )

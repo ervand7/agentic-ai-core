@@ -8,8 +8,10 @@ from app.domains.documents.api.dependencies import (
     get_answer_question_service,
     get_ingest_document_service,
 )
-from app.domains.documents.application.services import (
+from app.domains.documents.application.answer_question_service import (
     AnswerQuestionService,
+)
+from app.domains.documents.application.ingest_document_service import (
     IngestDocumentService,
 )
 from app.domains.documents.infrastructure.in_memory_vector_store import (

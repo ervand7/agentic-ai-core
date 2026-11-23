@@ -35,7 +35,9 @@ from app.domains.ai_tasks.domain.response_formats import (
     RESEARCH_PLAN_RESPONSE_FORMAT,
 )
 from app.domains.ai_tasks.domain.tools import RESEARCH_TOOL_DEFINITIONS
-from app.domains.documents.application.services import SearchDocumentsService
+from app.domains.documents.application.search_documents_service import (
+    SearchDocumentsService,
+)
 from app.shared.config import Settings
 from app.shared.exceptions import LLMServiceError
 from app.shared.openai_types import ChatCompletionMessageParam

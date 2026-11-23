@@ -21,8 +21,8 @@ from app.domains.ai_tasks.domain.tools import (
     SendEmailDraftArgs,
     ToolSpec,
 )
-from app.domains.documents.application.services import (
-    EmptyVectorStoreError,
+from app.domains.documents.application.exceptions import EmptyVectorStoreError
+from app.domains.documents.application.search_documents_service import (
     SearchDocumentsService,
 )
 from app.shared.exceptions import LLMServiceError

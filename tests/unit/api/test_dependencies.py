@@ -5,9 +5,13 @@ import pytest
 from app.domains.ai_tasks.api import dependencies as ai_deps
 from app.domains.ai_tasks.application.ai_tasks_service import AITasksService
 from app.domains.documents.api import dependencies as doc_deps
-from app.domains.documents.application.services import (
+from app.domains.documents.application.answer_question_service import (
     AnswerQuestionService,
+)
+from app.domains.documents.application.ingest_document_service import (
     IngestDocumentService,
+)
+from app.domains.documents.application.search_documents_service import (
     SearchDocumentsService,
 )
 

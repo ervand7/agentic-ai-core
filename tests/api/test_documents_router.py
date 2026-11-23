@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from app.domains.documents.api.dependencies import (
     get_answer_question_service,
     get_ingest_document_service,
+    get_langchain_answer_question_service,
     get_search_documents_service,
 )
 from app.domains.documents.api.schemas import (
@@ -16,7 +17,7 @@ from app.domains.documents.api.schemas import (
     DocumentUploadResponse,
     SearchResult,
 )
-from app.domains.documents.application.services import (
+from app.domains.documents.application.exceptions import (
     DocumentValidationError,
     EmptyVectorStoreError,
 )
@@ -189,4 +190,43 @@ class TestAsk:
         )
         app.dependency_overrides[get_answer_question_service] = lambda: service
         resp = client.post("/documents/ask", json={"question": "hi"})
+        assert resp.status_code == 400
+
+
+class TestAskLangChain:
+    def test_answer_with_citations(self, client):
+        service = make_execute_service_mock(
+            result=RagAnswer(
+                answer="Cats are great [1].",
+                citations=[
+                    Citation(
+                        index=1, filename="a.txt", text="cats", similarity=0.876543
+                    )
+                ],
+                used_context=True,
+                model="gpt-4o-mini",
+                tokens_used=20,
+            )
+        )
+        app.dependency_overrides[get_langchain_answer_question_service] = (
+            lambda: service
+        )
+        resp = client.post(
+            "/documents/ask-langchain",
+            json={"question": "Are cats great?", "top_k": 2},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["answer"] == "Cats are great [1]."
+        assert body["citations"][0]["similarity"] == 0.8765
+        assert service.execute.await_args.kwargs["top_k"] == 2
+
+    def test_empty_store_maps_to_400(self, client):
+        service = make_execute_service_mock(
+            error=EmptyVectorStoreError("No documents uploaded yet.")
+        )
+        app.dependency_overrides[get_langchain_answer_question_service] = (
+            lambda: service
+        )
+        resp = client.post("/documents/ask-langchain", json={"question": "hi"})
         assert resp.status_code == 400

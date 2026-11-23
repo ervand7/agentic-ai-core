@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
-from app.domains.documents.application.services import (
-    DocumentValidationError,
+from app.domains.documents.application.exceptions import DocumentValidationError
+from app.domains.documents.application.ingest_document_service import (
     IngestDocumentService,
 )
 from app.domains.documents.infrastructure.in_memory_vector_store import (

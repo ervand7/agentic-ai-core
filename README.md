@@ -150,6 +150,7 @@ Ready-to-run `curl` examples for every endpoint live in
 | `POST` | `/documents/upload` | Upload `.txt`/`.pdf`, chunk, embed, and store in Qdrant |
 | `POST` | `/documents/search` | Vector search with optional keyword search and filters |
 | `POST` | `/documents/ask` | RAG answer grounded in your docs, with citations |
+| `POST` | `/documents/ask-langchain` | Same RAG answer, with the pipeline built on LangChain (see [`doc/6. LANGCHAIN.md`](doc/6.%20LANGCHAIN.md)) |
 
 ---
 

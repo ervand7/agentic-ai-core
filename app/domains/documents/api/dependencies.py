@@ -2,9 +2,20 @@
 
 from functools import lru_cache
 
-from app.domains.documents.application.services import (
+from langchain_core.language_models import BaseChatModel
+from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
+
+from app.domains.documents.application.answer_question_service import (
     AnswerQuestionService,
+)
+from app.domains.documents.application.ingest_document_service import (
     IngestDocumentService,
+)
+from app.domains.documents.application.langchain_answer_question_service import (
+    LangChainAnswerQuestionService,
+)
+from app.domains.documents.application.search_documents_service import (
     SearchDocumentsService,
 )
 from app.domains.documents.domain.ports import (
@@ -47,6 +58,20 @@ def get_answer_generator() -> AnswerGenerator:
     return OpenAIAnswerGenerator(get_openai_client())
 
 
+@lru_cache
+def get_langchain_chat_model() -> BaseChatModel:
+    """Singleton LangChain chat model, configured like the shared OpenAI client."""
+    settings = get_settings()
+    return ChatOpenAI(
+        model=settings.OPENAI_MODEL,
+        api_key=SecretStr(settings.OPENAI_API_KEY),
+        temperature=settings.RAG_TEMPERATURE,
+        max_completion_tokens=settings.RAG_MAX_TOKENS,
+        timeout=settings.OPENAI_TIMEOUT_SECONDS,
+        max_retries=settings.OPENAI_MAX_RETRIES,
+    )
+
+
 def get_ingest_document_service() -> IngestDocumentService:
     """Compose the ingest use case with its dependencies."""
     settings = get_settings()
@@ -78,4 +103,17 @@ def get_answer_question_service() -> AnswerQuestionService:
         min_similarity=settings.RAG_MIN_SIMILARITY,
         temperature=settings.RAG_TEMPERATURE,
         max_tokens=settings.RAG_MAX_TOKENS,
+    )
+
+
+def get_langchain_answer_question_service() -> LangChainAnswerQuestionService:
+    """Compose the LangChain RAG (ask) use case with its dependencies."""
+    settings = get_settings()
+    return LangChainAnswerQuestionService(
+        embedding_provider=get_embedding_provider(),
+        vector_store=get_vector_store(),
+        chat_model=get_langchain_chat_model(),
+        system_prompt=settings.PROMPT_RAG_SYSTEM,
+        top_k=settings.RAG_TOP_K,
+        min_similarity=settings.RAG_MIN_SIMILARITY,
     )

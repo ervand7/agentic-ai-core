@@ -4,10 +4,10 @@ from typing import Optional
 
 import pytest
 
-from app.domains.documents.application.services import (
+from app.domains.documents.application.answer_question_service import (
     AnswerQuestionService,
-    EmptyVectorStoreError,
 )
+from app.domains.documents.application.exceptions import EmptyVectorStoreError
 from app.domains.documents.domain.models import SearchHit, StoredChunk
 from app.domains.documents.domain.ports import (
     AnswerGenerator,
