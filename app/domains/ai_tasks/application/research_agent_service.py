@@ -272,10 +272,12 @@ class ResearchAgentService:
         state.record_call(tokens_used=final.tokens_used, model=final.model)
         state.final_answer = final.content
 
-    async def _reflect(self, state: AgentState, request_id: str) -> None:
+    async def _reflect(
+        self, state: AgentState, request_id: str
+    ) -> Optional[AgentCritique]:
         """Self-critique the draft and optionally replace it with a revision."""
         if not state.final_answer:
-            return
+            return None
         prompt = get_prompts()[CRITIC_PROMPT_KEY]
         system_message: ChatCompletionSystemMessageParam = {
             "role": "system",
@@ -314,9 +316,10 @@ class ResearchAgentService:
                 exc,
                 (result.content or "")[:PLAN_RAW_LOG_LIMIT],
             )
-            return
+            return None
         state.critique = (
             "; ".join(critique.issues) if critique.issues else "No issues found."
         )
         if not critique.approved and critique.revised_answer:
             state.final_answer = critique.revised_answer.strip()
+        return critique

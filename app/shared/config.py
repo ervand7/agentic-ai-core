@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     AGENT_REPORT_MAX_TOKENS: int = Field(default=800, ge=1)
     AGENT_CRITIC_MAX_TOKENS: int = Field(default=1_200, ge=1)
     AGENT_ENABLE_REFLECTION: bool = Field(default=True)
+    AGENT_MAX_REVISIONS: int = Field(default=1, ge=0, le=3)
 
     PROMPT_ASK_SYSTEM: str = Field(
         default="You are a helpful assistant. Give clear and concise answers.",

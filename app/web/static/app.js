@@ -146,6 +146,23 @@ const TOOLS = [
     ],
   },
   {
+    id: "research-agent-langgraph",
+    group: "Agents",
+    name: "Research Agent (LangGraph)",
+    icon: "⇶",
+    method: "POST",
+    path: "/research-agent-langgraph",
+    kind: "json",
+    title: "Research agent (LangGraph)",
+    desc: "Same agent as a graph: the critic can send the report back for another round, and the run pauses for your approval before non-read-only tools (e.g. ticket drafts).",
+    fields: [
+      { name: "topic", label: "Topic", type: "textarea", required: true,
+        placeholder: "Research retry logic in my docs and create a ticket draft to improve it." },
+      { name: "max_iterations", label: "Max iterations", type: "number", required: false,
+        min: 1, max: 10, placeholder: "6", hint: "Optional — hard cap on agent loop steps (1-10)." },
+    ],
+  },
+  {
     id: "upload",
     group: "Documents",
     name: "Upload",
@@ -467,7 +484,7 @@ function renderResult(tool, data) {
   const block = el("div", "result-block");
 
   // Research agent has its own multi-section layout (plan + trace + report).
-  if (tool.id === "research-agent") {
+  if (tool.id.startsWith("research-agent")) {
     renderAgent(block, data);
     block.appendChild(rawJson(data));
     body.appendChild(block);
@@ -556,14 +573,21 @@ function renderResult(tool, data) {
 }
 
 function renderAgent(block, data) {
-  // Final report
-  block.appendChild(sectionLabel("Report"));
-  block.appendChild(answerText(data.report || "(no report produced)"));
+  // LangGraph human-in-the-loop: ask right here before running risky tools
+  if (data.status === "awaiting_approval") {
+    block.appendChild(approvalCard(data));
+  } else {
+    block.appendChild(sectionLabel("Report"));
+    block.appendChild(answerText(data.report || "(no report produced)"));
+  }
 
   // Run summary: stop reason + iterations used
   const stopMeta = [];
+  if (data.status) stopMeta.push(["Status", data.status]);
   if (data.stop_reason) stopMeta.push(["Stop reason", data.stop_reason]);
   if (data.iterations_used !== undefined) stopMeta.push(["Iterations", data.iterations_used]);
+  if (data.revisions !== undefined) stopMeta.push(["Revisions", data.revisions]);
+  if (data.thread_id) stopMeta.push(["Thread ID", data.thread_id]);
   if (stopMeta.length) block.appendChild(metaRow(stopMeta));
 
   // Plan
@@ -594,6 +618,57 @@ function renderAgent(block, data) {
   if (meta.length) {
     block.appendChild(el("hr", "divider"));
     block.appendChild(metaRow(meta));
+  }
+}
+
+function approvalCard(data) {
+  const card = el("div", "approval-card");
+  card.appendChild(el("div", "approval-title", "The agent wants to run these actions"));
+  card.appendChild(el("div", "approval-desc",
+    "They are not read-only, so the run is paused until you decide."));
+
+  (data.pending_tool_calls || []).forEach((call) => {
+    const wrap = el("div", "tool-call");
+    wrap.appendChild(el("span", "cite-badge", call.name));
+    let args = call.arguments;
+    try { args = JSON.stringify(JSON.parse(args), null, 2); } catch {}
+    wrap.appendChild(el("pre", "code", args));
+    card.appendChild(wrap);
+  });
+
+  const actions = el("div", "approval-actions");
+  const approve = el("button", "btn primary", "Approve");
+  const reject = el("button", "btn ghost", "Reject");
+  approve.type = reject.type = "button";
+  approve.addEventListener("click", () => resumeRun(data.thread_id, true, [approve, reject]));
+  reject.addEventListener("click", () => resumeRun(data.thread_id, false, [approve, reject]));
+  actions.appendChild(approve);
+  actions.appendChild(reject);
+  card.appendChild(actions);
+  return card;
+}
+
+async function resumeRun(threadId, approved, buttons) {
+  buttons.forEach((b) => (b.disabled = true));
+  buttons[approved ? 0 : 1].textContent = approved ? "Approving…" : "Rejecting…";
+  try {
+    const res = await fetch("/research-agent-langgraph/resume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ thread_id: threadId, approved }),
+    });
+    const text = await res.text();
+    let data;
+    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+    setStatus(res.status, res.ok);
+    if (!res.ok) {
+      showError(data.detail || `Request failed (${res.status}).`);
+      return;
+    }
+    lastResultJson = data;
+    renderResult(activeTool, data);
+  } catch (err) {
+    showError(err.message || String(err));
   }
 }
 

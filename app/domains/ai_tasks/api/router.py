@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 
 from app.domains.ai_tasks.api.dependencies import (
     get_ai_tasks_service,
+    get_langgraph_research_agent_service,
     get_research_agent_service,
 )
 from app.domains.ai_tasks.api.schemas import (
@@ -16,14 +17,19 @@ from app.domains.ai_tasks.api.schemas import (
     ClassifyResponse,
     ExtractKeywordsRequest,
     ExtractKeywordsResponse,
+    LangGraphResearchAgentResponse,
     ResearchAgentRequest,
     ResearchAgentResponse,
+    ResearchAgentResumeRequest,
     SummarizeRequest,
     SummarizeResponse,
     ToolAssistantRequest,
     ToolAssistantResponse,
     TranslateRequest,
     TranslateResponse,
+)
+from app.domains.ai_tasks.application.langgraph_research_agent_service import (
+    LangGraphResearchAgentService,
 )
 from app.domains.ai_tasks.application.research_agent_service import ResearchAgentService
 from app.domains.ai_tasks.application.ai_tasks_service import AITasksService
@@ -135,4 +141,38 @@ async def research_agent(
         payload.topic,
         request.state.request_id,
         max_iterations=payload.max_iterations,
+    )
+
+
+@router.post("/research-agent-langgraph", response_model=LangGraphResearchAgentResponse)
+async def research_agent_langgraph(
+    payload: ResearchAgentRequest,
+    request: Request,
+    service: LangGraphResearchAgentService = Depends(
+        get_langgraph_research_agent_service
+    ),
+) -> LangGraphResearchAgentResponse:
+    """Start a LangGraph research run. It may pause awaiting human approval."""
+    return await service.run(
+        payload.topic,
+        request.state.request_id,
+        max_iterations=payload.max_iterations,
+    )
+
+
+@router.post(
+    "/research-agent-langgraph/resume", response_model=LangGraphResearchAgentResponse
+)
+async def research_agent_langgraph_resume(
+    payload: ResearchAgentResumeRequest,
+    request: Request,
+    service: LangGraphResearchAgentService = Depends(
+        get_langgraph_research_agent_service
+    ),
+) -> LangGraphResearchAgentResponse:
+    """Approve or reject the pending tool calls of a paused run and continue it."""
+    return await service.resume(
+        payload.thread_id,
+        request.state.request_id,
+        approved=payload.approved,
     )

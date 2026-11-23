@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.domains.ai_tasks.api.dependencies import (
     get_ai_tasks_service,
+    get_langgraph_research_agent_service,
     get_research_agent_service,
 )
 from app.domains.ai_tasks.api.schemas import (
@@ -16,11 +17,16 @@ from app.domains.ai_tasks.api.schemas import (
     AskResponse,
     ClassifyResponse,
     ExtractKeywordsResponse,
+    LangGraphResearchAgentResponse,
+    PendingToolCall,
     ResearchAgentResponse,
     SummarizeResponse,
     ToolAssistantResponse,
     ToolExecutionResult,
     TranslateResponse,
+)
+from app.domains.ai_tasks.application.langgraph_research_agent_service import (
+    ResearchRunNotFoundError,
 )
 from app.main import app
 from app.shared.exceptions import (
@@ -230,6 +236,62 @@ class TestResearchAgent:
         resp = client.post("/research-agent", json={"topic": "x", "max_iterations": 3})
         assert resp.status_code == 200
         assert research_agent_service.run.await_args.kwargs["max_iterations"] == 3
+
+
+def _langgraph_response(status: str) -> LangGraphResearchAgentResponse:
+    return LangGraphResearchAgentResponse(
+        **_agent_response("retry logic").model_dump(),
+        thread_id="thread-1",
+        status=status,
+        pending_tool_calls=[
+            PendingToolCall(id="call_1", name="create_ticket", arguments="{}")
+        ]
+        if status == "awaiting_approval"
+        else [],
+    )
+
+
+@pytest.fixture
+def langgraph_agent_service() -> MagicMock:
+    """Mocked ``LangGraphResearchAgentService`` injected via dependency override."""
+    mock = MagicMock()
+    mock.run = AsyncMock(return_value=_langgraph_response("awaiting_approval"))
+    mock.resume = AsyncMock(return_value=_langgraph_response("completed"))
+    app.dependency_overrides[get_langgraph_research_agent_service] = lambda: mock
+    return mock
+
+
+class TestLangGraphResearchAgent:
+    def test_start_returns_paused_run(self, client, langgraph_agent_service):
+        resp = client.post(
+            "/research-agent-langgraph", json={"topic": "x", "max_iterations": 3}
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "awaiting_approval"
+        assert body["thread_id"] == "thread-1"
+        assert body["pending_tool_calls"][0]["name"] == "create_ticket"
+        assert langgraph_agent_service.run.await_args.kwargs["max_iterations"] == 3
+
+    def test_resume_passes_decision(self, client, langgraph_agent_service):
+        resp = client.post(
+            "/research-agent-langgraph/resume",
+            json={"thread_id": "thread-1", "approved": "yes"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+        args = langgraph_agent_service.resume.await_args
+        assert args.args[0] == "thread-1"
+        assert args.kwargs["approved"] is True
+
+    def test_resume_unknown_thread_maps_to_404(self, client, langgraph_agent_service):
+        langgraph_agent_service.resume.side_effect = ResearchRunNotFoundError("nope")
+        resp = client.post(
+            "/research-agent-langgraph/resume",
+            json={"thread_id": "missing", "approved": True},
+        )
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "nope"
 
 
 class TestErrorMapping:

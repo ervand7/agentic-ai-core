@@ -45,6 +45,14 @@ def test_document_error_handlers_registered():
     assert EmptyVectorStoreError in app.exception_handlers
 
 
+def test_ai_tasks_error_handlers_registered():
+    from app.domains.ai_tasks.application.langgraph_research_agent_service import (
+        ResearchRunNotFoundError,
+    )
+
+    assert ResearchRunNotFoundError in app.exception_handlers
+
+
 def test_llm_error_handlers_registered():
     from app.shared.exceptions import LLMServiceError, LLMTimeoutError
 

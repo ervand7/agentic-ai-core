@@ -2,6 +2,9 @@
 
 from functools import lru_cache
 
+from app.domains.ai_tasks.application.langgraph_research_agent_service import (
+    LangGraphResearchAgentService,
+)
 from app.domains.ai_tasks.application.research_agent_service import ResearchAgentService
 from app.domains.ai_tasks.application.ai_tasks_service import AITasksService
 from app.domains.ai_tasks.infrastructure.openai_llm_provider import OpenAILLMProvider
@@ -24,6 +27,16 @@ def get_ai_tasks_service() -> AITasksService:
 def get_research_agent_service() -> ResearchAgentService:
     """Compose the research agent with the OpenAI provider and doc search tool."""
     return ResearchAgentService(
+        llm_provider=OpenAILLMProvider(get_openai_client()),
+        settings=get_settings(),
+        document_search=get_search_documents_service(),
+    )
+
+
+@lru_cache
+def get_langgraph_research_agent_service() -> LangGraphResearchAgentService:
+    """Singleton LangGraph research agent, so its in-memory checkpoints persist."""
+    return LangGraphResearchAgentService(
         llm_provider=OpenAILLMProvider(get_openai_client()),
         settings=get_settings(),
         document_search=get_search_documents_service(),

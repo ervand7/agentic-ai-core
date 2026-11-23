@@ -160,3 +160,29 @@ class ResearchAgentResponse(BaseModel):
     model: str
     tokens_used: int
     prompt_version: str
+
+
+class ResearchAgentResumeRequest(BaseModel):
+    """Human decision that resumes a paused LangGraph research run."""
+
+    thread_id: str = Field(..., min_length=1, description="Run id to resume")
+    approved: bool = Field(
+        ..., description="Approve (true) or reject (false) the pending tool calls"
+    )
+
+
+class PendingToolCall(BaseModel):
+    """A tool call waiting for human approval before it is executed."""
+
+    id: str
+    name: str
+    arguments: str
+
+
+class LangGraphResearchAgentResponse(ResearchAgentResponse):
+    """Research agent response plus the LangGraph run state."""
+
+    thread_id: str
+    status: Literal["completed", "awaiting_approval"]
+    revisions: int = 0
+    pending_tool_calls: list[PendingToolCall] = Field(default_factory=list)

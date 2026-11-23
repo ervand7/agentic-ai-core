@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.domains.ai_tasks.api import error_handlers as ai_tasks_error_handlers
 from app.domains.ai_tasks.api.router import router as ai_tasks_router
 from app.domains.documents.api import error_handlers as documents_error_handlers
 from app.domains.documents.api.router import router as documents_router
@@ -22,3 +23,4 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 register_middleware(app)
 register_error_handlers(app)
 documents_error_handlers.register_error_handlers(app)
+ai_tasks_error_handlers.register_error_handlers(app)
