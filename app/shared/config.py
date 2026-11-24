@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     AGENT_CRITIC_MAX_TOKENS: int = Field(default=1_200, ge=1)
     AGENT_ENABLE_REFLECTION: bool = Field(default=True)
     AGENT_MAX_REVISIONS: int = Field(default=1, ge=0, le=3)
+    AGENT_NODE_MAX_ATTEMPTS: int = Field(default=2, ge=1, le=5)
+    LANGGRAPH_POSTGRES_URL: str = Field(
+        default="postgresql://postgres:postgres@localhost:5432/agentic_ai"
+    )
 
     PROMPT_ASK_SYSTEM: str = Field(
         default="You are a helpful assistant. Give clear and concise answers.",
@@ -133,6 +137,17 @@ class Settings(BaseSettings):
             "Be strict but fair. Return only valid JSON that matches the schema: set "
             "approved=true only when the report is solid; otherwise list concrete "
             "issues and provide an improved revised_answer."
+        ),
+        min_length=1,
+    )
+    PROMPT_RESEARCH_AGENT_WRITER_SYSTEM: str = Field(
+        default=(
+            "You are a report writer. Turn the researcher's findings and the "
+            "gathered tool evidence into the final report: a short summary, the key "
+            "findings as bullet points, and citations to the documents used. Use "
+            "ONLY the provided findings and evidence. Never fabricate sources or "
+            "facts; if the evidence is insufficient, say so explicitly. Never claim "
+            "a ticket or email action was taken; those tools only create drafts."
         ),
         min_length=1,
     )

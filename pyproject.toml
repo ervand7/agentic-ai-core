@@ -19,6 +19,8 @@ pypdf = "^6.13.0"
 langchain-core = "^1.8.4"
 langchain-openai = "^1.8.5"
 langgraph = "^1.2.24"
+langgraph-checkpoint-postgres = "^3.2.1"
+psycopg = {extras = ["binary"], version = "^3.3.9"}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.3"

@@ -1,28 +1,39 @@
 """
-LangGraph version of the research agent.
+LangGraph version of the research agent, built as a supervisor + workers graph.
 
 Same planner, prompts, tools, and budgets as `ResearchAgentService`, but the
-workflow is an explicit graph with state that is checkpointed per `thread_id`:
+workflow is an explicit multi-agent graph whose state is checkpointed per
+`thread_id`:
 
-    plan -> research <-> tools          (agent loop)
-    research -> force_report            (budget hit)
-    research / force_report -> critic   (reflection)
-    critic -> research                  (critic rejects -> another round)
+    supervisor -> planner | researcher | writer | critic | END
+    every worker -> supervisor          (hub and spoke)
+    researcher <-> tools                (agent loop)
+
+The supervisor reads the shared state and hands off to the next worker:
+planner -> researcher -> writer -> critic. A rejected report sends the
+researcher back for another round; the writer then rewrites the report.
 
 New compared to the plain loop:
+- separate worker roles, with a dedicated writer producing the final report;
 - the critic can send the report back for another research round;
 - the run pauses (human-in-the-loop) before any tool that is not read-only and
-  continues after `resume(thread_id, approved=...)`.
+  continues after `resume(thread_id, approved=...)`;
+- LLM workers are retried on transient provider errors (`RetryPolicy`).
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal, Optional, cast
 from uuid import uuid4
 
 from langchain_core.runnables import RunnableConfig
+from openai.types.chat import (
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
 
 # PyCharm's package-requirements inspection does not always see Poetry deps.
 # noinspection PyPackageRequirements
@@ -35,7 +46,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 # noinspection PyPackageRequirements
-from langgraph.types import Command, StateSnapshot, interrupt
+from langgraph.types import Command, RetryPolicy, StateSnapshot, interrupt
 
 from app.domains.ai_tasks.api.schemas import (
     AgentIterationResult,
@@ -61,17 +72,27 @@ from app.domains.documents.application.search_documents_service import (
     SearchDocumentsService,
 )
 from app.shared.config import Settings
+from app.shared.exceptions import (
+    LLMRateLimitError,
+    LLMTemporaryError,
+    LLMTimeoutError,
+)
 from app.shared.openai_types import ChatCompletionMessageParam
 
 logger = logging.getLogger(__name__)
 
-PLAN_NODE = "plan"
-RESEARCH_NODE = "research"
+SUPERVISOR_NODE = "supervisor"
+PLANNER_NODE = "planner"
+RESEARCHER_NODE = "researcher"
 TOOLS_NODE = "tools"
-FORCE_REPORT_NODE = "force_report"
+WRITER_NODE = "writer"
 CRITIC_NODE = "critic"
+WORKER_NODES = (PLANNER_NODE, RESEARCHER_NODE, WRITER_NODE, CRITIC_NODE, END)
 
+WRITER_PROMPT_KEY = "research_agent_writer_v1"
 REJECTED_TOOL_RESULT = {"error": "Rejected by the human reviewer. Do not retry it."}
+# Only transient provider failures are worth re-running a whole node for.
+TRANSIENT_LLM_ERRORS = (LLMTimeoutError, LLMRateLimitError, LLMTemporaryError)
 
 
 class ResearchRunNotFoundError(Exception):
@@ -89,11 +110,13 @@ class ResearchGraphState:
     iteration: int = 0
     total_tokens: int = 0
     model: str = ""
+    findings: str = ""
+    research_done: bool = False
     report: str = ""
+    reviewed: bool = False
     critique: Optional[str] = None
     stop_reason: Optional[str] = None
     revisions: int = 0
-    needs_revision: bool = False
     pending_thought: str = ""
     pending_tool_calls: list[dict[str, str]] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
@@ -110,7 +133,7 @@ def _needs_approval(call: ToolCall) -> bool:
 
 
 class LangGraphResearchAgentService(ResearchAgentService):
-    """Research agent orchestrated as a LangGraph state machine."""
+    """Research agent orchestrated as a LangGraph supervisor + workers graph."""
 
     def __init__(
         self,
@@ -164,32 +187,49 @@ class LangGraphResearchAgentService(ResearchAgentService):
         return await self._response(thread_id, config)
 
     def _build_graph(self) -> Any:
+        # Tools are not retried: they may have side effects and hold the interrupt.
+        llm_retry = RetryPolicy(
+            max_attempts=self._settings.AGENT_NODE_MAX_ATTEMPTS,
+            initial_interval=self._settings.OPENAI_RETRY_BASE_DELAY_SECONDS,
+            retry_on=TRANSIENT_LLM_ERRORS,
+        )
         graph: Any = StateGraph(cast(Any, ResearchGraphState))
-        graph.add_node(PLAN_NODE, self._plan_node)
-        graph.add_node(RESEARCH_NODE, self._research_node)
+        graph.add_node(
+            SUPERVISOR_NODE, self._supervisor_node, destinations=WORKER_NODES
+        )
+        graph.add_node(PLANNER_NODE, self._planner_node, retry_policy=llm_retry)
+        graph.add_node(RESEARCHER_NODE, self._researcher_node, retry_policy=llm_retry)
         graph.add_node(TOOLS_NODE, self._tools_node)
-        graph.add_node(FORCE_REPORT_NODE, self._force_report_node)
-        graph.add_node(CRITIC_NODE, self._critic_node)
+        graph.add_node(WRITER_NODE, self._writer_node, retry_policy=llm_retry)
+        graph.add_node(CRITIC_NODE, self._critic_node, retry_policy=llm_retry)
 
-        graph.add_edge(START, PLAN_NODE)
-        graph.add_edge(PLAN_NODE, RESEARCH_NODE)
+        graph.add_edge(START, SUPERVISOR_NODE)
+        graph.add_edge(PLANNER_NODE, SUPERVISOR_NODE)
         graph.add_conditional_edges(
-            RESEARCH_NODE,
-            self._after_research,
-            [TOOLS_NODE, FORCE_REPORT_NODE, CRITIC_NODE, END],
+            RESEARCHER_NODE, self._after_researcher, [TOOLS_NODE, SUPERVISOR_NODE]
         )
-        graph.add_edge(TOOLS_NODE, RESEARCH_NODE)
-        graph.add_conditional_edges(
-            FORCE_REPORT_NODE, self._after_report, [CRITIC_NODE, END]
-        )
-        graph.add_conditional_edges(
-            CRITIC_NODE, self._after_critic, [RESEARCH_NODE, END]
-        )
+        graph.add_edge(TOOLS_NODE, RESEARCHER_NODE)
+        graph.add_edge(WRITER_NODE, SUPERVISOR_NODE)
+        graph.add_edge(CRITIC_NODE, SUPERVISOR_NODE)
         return graph
 
     # ----------------------------------------------------------------- nodes
 
-    async def _plan_node(
+    def _supervisor_node(self, state: ResearchGraphState) -> Command:
+        """Hand off to the next worker based on what the shared state still lacks."""
+        if not state.plan:
+            goto = PLANNER_NODE
+        elif not state.research_done:
+            goto = RESEARCHER_NODE
+        elif not state.report:
+            goto = WRITER_NODE
+        elif self._settings.AGENT_ENABLE_REFLECTION and not state.reviewed:
+            goto = CRITIC_NODE
+        else:
+            goto = END
+        return Command(goto=goto)
+
+    async def _planner_node(
         self, state: ResearchGraphState, config: RunnableConfig
     ) -> dict[str, Any]:
         agent = self._agent_state(state)
@@ -200,14 +240,14 @@ class LangGraphResearchAgentService(ResearchAgentService):
             "messages": self._initial_messages(state.topic, plan),
         }
 
-    async def _research_node(
+    async def _researcher_node(
         self, state: ResearchGraphState, config: RunnableConfig
     ) -> dict[str, Any]:
-        """One reason step: the model either requests tools or writes the report."""
+        """One reason step: the model either requests tools or reports findings."""
         agent = self._agent_state(state)
         budget_stop = agent.budget_stop_reason()
         if budget_stop is not None:
-            return {"stop_reason": budget_stop.value}
+            return {"stop_reason": budget_stop.value, "research_done": True}
 
         agent.iteration += 1
         step = await self._llm.complete_with_tools(
@@ -220,13 +260,18 @@ class LangGraphResearchAgentService(ResearchAgentService):
         agent.record_call(tokens_used=step.tokens_used, model=step.model)
 
         if not step.tool_calls:
-            agent.final_answer = step.content
             agent.stop_reason = AgentStopReason.COMPLETED
             iteration = AgentIterationResult(
                 iteration=agent.iteration, thought=step.content
             )
             return {
                 **self._agent_updates(agent),
+                "messages": [
+                    *state.messages,
+                    {"role": "assistant", "content": step.content},
+                ],
+                "findings": step.content,
+                "research_done": True,
                 "iterations": [*state.iterations, iteration.model_dump()],
             }
 
@@ -277,18 +322,36 @@ class LangGraphResearchAgentService(ResearchAgentService):
             "iterations": [*state.iterations, iteration.model_dump()],
         }
 
-    async def _force_report_node(
+    async def _writer_node(
         self, state: ResearchGraphState, config: RunnableConfig
     ) -> dict[str, Any]:
+        """Write the final report from the findings and the gathered evidence."""
         agent = self._agent_state(state)
-        await self._force_final_report(state.messages, agent, _request_id(config))
-        return self._agent_updates(agent)
+        prompt = get_prompts()[WRITER_PROMPT_KEY]
+        system_message: ChatCompletionSystemMessageParam = {
+            "role": "system",
+            "content": prompt.system_prompt,
+        }
+        user_message: ChatCompletionUserMessageParam = {
+            "role": "user",
+            "content": self._writer_brief(state),
+        }
+        messages: list[ChatCompletionMessageParam] = [system_message, user_message]
+        result = await self._llm.complete(
+            endpoint=Endpoint.RESEARCH_AGENT_WRITER,
+            request_id=_request_id(config),
+            messages=messages,
+            temperature=self._settings.AGENT_TEMPERATURE,
+            max_tokens=self._settings.AGENT_REPORT_MAX_TOKENS,
+        )
+        agent.record_call(tokens_used=result.tokens_used, model=result.model)
+        agent.final_answer = result.content
+        return {**self._agent_updates(agent), "reviewed": False}
 
     async def _critic_node(
         self, state: ResearchGraphState, config: RunnableConfig
     ) -> dict[str, Any]:
-        """Review the draft; send it back for another round if it is rejected."""
-        draft = state.report
+        """Review the report; send the researcher back if it is rejected."""
         agent = self._agent_state(state)
         critique = await self._reflect(agent, _request_id(config))
 
@@ -297,46 +360,61 @@ class LangGraphResearchAgentService(ResearchAgentService):
             and state.revisions < self._settings.AGENT_MAX_REVISIONS
         )
         if critique is None or critique.approved or not can_revise:
-            return {**self._agent_updates(agent), "needs_revision": False}
+            return {**self._agent_updates(agent), "reviewed": True}
 
         feedback = (
-            "A reviewer rejected your report with these issues:\n"
+            "A reviewer rejected the report written from your findings with these "
+            "issues:\n"
             + "\n".join(f"- {issue}" for issue in critique.issues)
-            + "\n\nResearch further with the tools if needed, then write an "
-            "improved final report."
+            + "\n\nResearch further with the tools if needed, then summarize your "
+            "updated findings."
         )
         return {
             **self._agent_updates(agent),
-            "messages": [
-                *state.messages,
-                {"role": "assistant", "content": draft},
-                {"role": "user", "content": feedback},
-            ],
+            "messages": [*state.messages, {"role": "user", "content": feedback}],
+            "report": "",
+            "research_done": False,
             "revisions": state.revisions + 1,
-            "needs_revision": True,
         }
 
     # --------------------------------------------------------------- routing
 
-    def _after_research(self, state: ResearchGraphState) -> str:
-        if state.pending_tool_calls:
-            return TOOLS_NODE
-        if state.stop_reason != AgentStopReason.COMPLETED.value:
-            return FORCE_REPORT_NODE
-        return self._after_report(state)
-
-    def _after_report(self, _state: ResearchGraphState) -> str:
-        return CRITIC_NODE if self._settings.AGENT_ENABLE_REFLECTION else END
-
     @staticmethod
-    def _after_critic(state: ResearchGraphState) -> str:
-        return RESEARCH_NODE if state.needs_revision else END
+    def _after_researcher(state: ResearchGraphState) -> str:
+        return TOOLS_NODE if state.pending_tool_calls else SUPERVISOR_NODE
 
     # --------------------------------------------------------------- helpers
 
     @staticmethod
     def _config(thread_id: str, request_id: str) -> RunnableConfig:
         return {"configurable": {"thread_id": thread_id, "request_id": request_id}}
+
+    @staticmethod
+    def _writer_brief(state: ResearchGraphState) -> str:
+        plan_text = "\n".join(
+            f"{index}. {step}" for index, step in enumerate(state.plan, start=1)
+        )
+        evidence = [
+            {
+                "tool": call["name"],
+                "arguments": call["arguments"],
+                "result": call["result"],
+            }
+            for call in state.tool_calls
+            if call["status"] == "executed"
+        ]
+        findings = state.findings or "(none)"
+        if state.stop_reason != AgentStopReason.COMPLETED.value:
+            findings += (
+                f"\n\nResearch was stopped early ({state.stop_reason}); write the "
+                "best report possible from the evidence gathered so far."
+            )
+        return (
+            f"Research topic:\n{state.topic}\n\n"
+            f"Research plan:\n{plan_text}\n\n"
+            f"Researcher findings:\n{findings}\n\n"
+            f"Tool evidence (JSON):\n{json.dumps(evidence, ensure_ascii=False)}"
+        )
 
     def _agent_state(self, state: ResearchGraphState) -> AgentState:
         """Bridge graph state onto the `AgentState` the base-class steps use."""

@@ -118,7 +118,7 @@ ci: install-dev check ## Install dev deps then run the read-only check gate (for
 # Docker
 # ---------------------------------------------------------------------------
 .PHONY: docker-up
-docker-up: ## Start services (app + Qdrant) via docker compose
+docker-up: ## Start services (app + Qdrant + Postgres) via docker compose
 	docker compose up --build
 
 .PHONY: docker-down

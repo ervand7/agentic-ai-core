@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, create_autospec
 import pytest
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
+os.environ.setdefault("LANGGRAPH_POSTGRES_URL", "")
 
 from app.domains.ai_tasks.domain.ports import (  # noqa: E402
     CompletionResult,

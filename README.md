@@ -20,7 +20,7 @@
 <img src="https://img.shields.io/badge/Pydantic-v2-E92063?style=for-the-badge&logo=pydantic&logoColor=white"/>
 <img src="https://img.shields.io/badge/Docker-compose-2496ED?style=for-the-badge&logo=docker&logoColor=white"/>
 <br/>
-<img src="https://img.shields.io/badge/tests-338%20passing-2EA44F?style=flat-square&logo=pytest&logoColor=white"/>
+<img src="https://img.shields.io/badge/tests-345%20passing-2EA44F?style=flat-square&logo=pytest&logoColor=white"/>
 <img src="https://img.shields.io/badge/mypy-clean-2A6DB2?style=flat-square"/>
 <img src="https://img.shields.io/badge/ruff-lint%20%2B%20format-D7FF64?style=flat-square&logo=ruff&logoColor=black"/>
 <img src="https://img.shields.io/badge/architecture-DDD%20%2B%20Hexagonal-8A2BE2?style=flat-square"/>
@@ -92,8 +92,9 @@ self-critique, and a full step-by-step trace.
 <td width="33%" valign="top">
 
 ### 🕸 LangGraph Agent
-The same agent as a **graph**: the critic can send reports back for revision,
-and runs **pause for human approval** before risky tools.
+The same agent as a **supervisor + workers** graph (planner, researcher,
+writer, critic): reports go back for revision, runs **pause for human approval**
+before risky tools, and survive restarts via **Postgres checkpoints**.
 
 </td>
 </tr>
@@ -208,15 +209,16 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    START(["▶ start"]):::edge --> plan["🗺 plan"]:::node
-    plan --> research["🔎 research"]:::node
-    research -->|tools requested| tools["🛠 tools"]:::node
-    tools -->|"✋ pause for approval<br/>(non-read-only tools)"| research
-    research -->|budget hit| force["⏱ force report"]:::warn
-    research -->|report written| critic["🧐 critic"]:::node
-    force --> critic
-    critic -->|rejected · revisions left| research
-    critic -->|approved| END(["🏁 end"]):::edge
+    START(["▶ start"]):::edge --> supervisor["🧭 supervisor"]:::warn
+    supervisor --> planner["🗺 planner"]:::node
+    supervisor --> researcher["🔎 researcher"]:::node
+    supervisor --> writer["✍️ writer"]:::node
+    supervisor --> critic["🧐 critic"]:::node
+    supervisor -->|all done| END(["🏁 end"]):::edge
+    planner & writer & critic --> supervisor
+    researcher -->|tools requested| tools["🛠 tools"]:::node
+    tools -->|"✋ pause for approval<br/>(non-read-only tools)"| researcher
+    researcher -->|findings ready · budget hit| supervisor
 
     classDef node fill:#7F00FF,stroke:#E100FF,color:#fff
     classDef warn fill:#FF6F00,stroke:#c25400,color:#fff
@@ -236,8 +238,8 @@ poetry install
 # 2️⃣  Configure — then set OPENAI_API_KEY in .env
 cp .env.example .env
 
-# 3️⃣  Start Qdrant (needed for search & RAG)
-docker compose up -d qdrant
+# 3️⃣  Start Qdrant (search & RAG) and Postgres (LangGraph checkpoints)
+docker compose up -d qdrant postgres
 
 # 4️⃣  Run the API
 poetry run uvicorn app.main:app --reload
@@ -261,7 +263,7 @@ poetry run uvicorn app.main:app --reload
 <br/>
 
 ```bash
-docker compose up --build -d   # app + Qdrant
+docker compose up --build -d   # app + Qdrant + Postgres
 docker compose down            # stop
 ```
 
@@ -346,6 +348,8 @@ Source of truth: [`app/shared/config.py`](app/shared/config.py).
 | `AGENT_TEMPERATURE` / `AGENT_REPORT_MAX_TOKENS` | Agent sampling and final report size | `0.1` / `800` |
 | `AGENT_ENABLE_REFLECTION` | Run the agent's self-critique pass | `true` |
 | `AGENT_MAX_REVISIONS` | Extra research rounds the LangGraph critic may request | `1` |
+| `AGENT_NODE_MAX_ATTEMPTS` | LangGraph node attempts on transient LLM errors | `2` |
+| `LANGGRAPH_POSTGRES_URL` | Postgres for LangGraph checkpoints (empty = in memory) | `postgresql://postgres:postgres@localhost:5432/agentic_ai` |
 | `PROMPT_*_SYSTEM` | Tunable system prompts per task | sensible defaults |
 
 Prompts are versioned in `app/domains/ai_tasks/domain/prompts.py` — bump a prompt's
@@ -386,8 +390,8 @@ Prompts are versioned in `app/domains/ai_tasks/domain/prompts.py` — bump a pro
 ## ⚠️ Current Limitations
 
 - Qdrant must be running for upload, search, and ask.
+- Postgres must be running at startup unless `LANGGRAPH_POSTGRES_URL` is empty.
 - Upload supports `.txt` and text-based `.pdf` only — scanned PDFs are not OCR'd.
-- Paused LangGraph runs are kept in memory and are lost on restart.
 
 <!-- ═══════════════════════════════ FOOTER ═══════════════════════════════ -->
 

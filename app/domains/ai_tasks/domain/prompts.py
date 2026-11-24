@@ -89,6 +89,11 @@ def _build_prompts(settings: Settings) -> dict[str, PromptTemplate]:
             version="v1",
             system_prompt=settings.PROMPT_RESEARCH_AGENT_CRITIC_SYSTEM,
         ),
+        "research_agent_writer_v1": PromptTemplate(
+            name="research_agent_writer",
+            version="v1",
+            system_prompt=settings.PROMPT_RESEARCH_AGENT_WRITER_SYSTEM,
+        ),
     }
 
 

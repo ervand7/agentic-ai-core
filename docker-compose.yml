@@ -10,9 +10,12 @@ services:
       - .env
     environment:
       QDRANT_URL: http://qdrant:6333
+      LANGGRAPH_POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/agentic_ai
     depends_on:
       qdrant:
         condition: service_started
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   qdrant:
@@ -24,5 +27,24 @@ services:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
 
+  postgres:
+    image: postgres:17-alpine
+    container_name: agentic-ai-core-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agentic_ai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d agentic_ai"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+
 volumes:
   qdrant_data:
+  postgres_data:

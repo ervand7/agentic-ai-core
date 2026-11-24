@@ -1,7 +1,7 @@
-"""Unit tests for the LangGraph research agent: loop, critic revisions, approvals."""
+"""Unit tests for the LangGraph research agent: workers, critic, approvals, retries."""
 
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -9,6 +9,7 @@ from app.domains.ai_tasks.application.langgraph_research_agent_service import (
     LangGraphResearchAgentService,
     ResearchRunNotFoundError,
 )
+from app.domains.ai_tasks.constants import Endpoint
 from app.domains.ai_tasks.domain.ports import (
     CompletionResult,
     LLMProvider,
@@ -16,6 +17,7 @@ from app.domains.ai_tasks.domain.ports import (
     ToolCompletionResult,
 )
 from app.shared.config import Settings
+from app.shared.exceptions import LLMServiceError, LLMTimeoutError
 from tests.conftest import async_mock_method, make_llm_provider_mock
 
 
@@ -31,6 +33,10 @@ def _plan_result(steps: list[str], tokens: int = 10) -> CompletionResult:
     return CompletionResult(
         content=json.dumps({"steps": steps}), model="m", tokens_used=tokens
     )
+
+
+def _report(content: str, tokens: int = 3) -> CompletionResult:
+    return CompletionResult(content=content, model="m", tokens_used=tokens)
 
 
 def _critique_result(
@@ -68,22 +74,34 @@ def _ticket_step() -> ToolCompletionResult:
     )
 
 
+def _writer_brief(provider: LLMProvider) -> str:
+    for call in _complete(provider).await_args_list:
+        if call.kwargs["endpoint"] == Endpoint.RESEARCH_AGENT_WRITER:
+            return call.kwargs["messages"][-1]["content"]
+    raise AssertionError("writer was not called")
+
+
 @pytest.fixture
 def provider() -> LLMProvider:
     return make_llm_provider_mock()
 
 
 def _service(
-    provider: LLMProvider, settings: Settings
+    provider: LLMProvider, settings: Settings, **kwargs
 ) -> LangGraphResearchAgentService:
-    return LangGraphResearchAgentService(llm_provider=provider, settings=settings)
+    return LangGraphResearchAgentService(
+        llm_provider=provider, settings=settings, **kwargs
+    )
 
 
 class TestCompletion:
-    async def test_completes_when_model_stops_calling_tools(self, provider):
+    async def test_writer_turns_findings_into_report(self, provider):
         settings = Settings(AGENT_ENABLE_REFLECTION=False)
-        _complete(provider).side_effect = [_plan_result(["a", "b"])]
-        _complete_with_tools(provider).return_value = _final("Final report")
+        _complete(provider).side_effect = [
+            _plan_result(["a", "b"]),
+            _report("Final report"),
+        ]
+        _complete_with_tools(provider).return_value = _final("Research findings")
 
         resp = await _service(provider, settings).run("topic", "req-1")
 
@@ -93,15 +111,19 @@ class TestCompletion:
         assert resp.stop_reason == "completed"
         assert resp.plan == ["a", "b"]
         assert resp.iterations_used == 1
-        assert resp.tokens_used == 13
+        assert resp.tokens_used == 16
         assert resp.pending_tool_calls == []
+        assert "Research findings" in _writer_brief(provider)
 
     async def test_read_only_tool_runs_without_pausing(self, provider):
         settings = Settings(AGENT_ENABLE_REFLECTION=False)
-        _complete(provider).side_effect = [_plan_result(["a"])]
+        _complete(provider).side_effect = [
+            _plan_result(["a"]),
+            _report("Report with evidence"),
+        ]
         _complete_with_tools(provider).side_effect = [
             _tool_step("search_docs", {"query": "retry logic"}),
-            _final("Report with evidence"),
+            _final("Findings"),
         ]
 
         resp = await _service(provider, settings).run("topic", "req-1")
@@ -111,12 +133,13 @@ class TestCompletion:
         assert resp.tool_calls[0].name == "search_docs"
         assert resp.tool_calls[0].status == "executed"
         assert len(resp.iterations) == 2
+        assert "retry logic" in _writer_brief(provider)
 
-    async def test_budget_stop_forces_final_report(self, provider):
+    async def test_budget_stop_hands_off_to_writer(self, provider):
         settings = Settings(AGENT_ENABLE_REFLECTION=False)
         _complete(provider).side_effect = [
             _plan_result(["a"]),
-            CompletionResult(content="Forced report", model="m", tokens_used=5),
+            _report("Forced report", tokens=5),
         ]
         _complete_with_tools(provider).return_value = _tool_step(
             "search_docs", {"query": "x"}
@@ -129,6 +152,31 @@ class TestCompletion:
         assert resp.stop_reason == "max_iterations"
         assert resp.iterations_used == 2
         assert resp.report == "Forced report"
+        assert "stopped early (max_iterations)" in _writer_brief(provider)
+
+
+class TestSupervisor:
+    async def test_hands_off_planner_researcher_writer_critic(self, provider):
+        settings = Settings(AGENT_ENABLE_REFLECTION=True)
+        _complete(provider).side_effect = [
+            _plan_result(["a"]),
+            _report("Report"),
+            _critique_result(approved=True, issues=[]),
+        ]
+        _complete_with_tools(provider).return_value = _final("Findings")
+
+        resp = await _service(provider, settings).run("topic", "req-1")
+
+        endpoints = [
+            call.kwargs["endpoint"] for call in _complete(provider).await_args_list
+        ]
+        assert endpoints == [
+            Endpoint.RESEARCH_AGENT_PLAN,
+            Endpoint.RESEARCH_AGENT_WRITER,
+            Endpoint.RESEARCH_AGENT_CRITIC,
+        ]
+        assert resp.report == "Report"
+        assert resp.critique == "No issues found."
 
 
 class TestCriticRevisions:
@@ -136,12 +184,14 @@ class TestCriticRevisions:
         settings = Settings(AGENT_ENABLE_REFLECTION=True, AGENT_MAX_REVISIONS=1)
         _complete(provider).side_effect = [
             _plan_result(["a"]),
+            _report("Draft report"),
             _critique_result(approved=False, issues=["missing citations"]),
+            _report("Improved report"),
             _critique_result(approved=True, issues=[]),
         ]
         _complete_with_tools(provider).side_effect = [
-            _final("Draft report"),
-            _final("Improved report"),
+            _final("Draft findings"),
+            _final("Improved findings"),
         ]
 
         resp = await _service(provider, settings).run("topic", "req-1")
@@ -154,7 +204,7 @@ class TestCriticRevisions:
         )
         assert second_round_messages[-2] == {
             "role": "assistant",
-            "content": "Draft report",
+            "content": "Draft findings",
         }
         assert "missing citations" in second_round_messages[-1]["content"]
 
@@ -162,15 +212,46 @@ class TestCriticRevisions:
         settings = Settings(AGENT_ENABLE_REFLECTION=True, AGENT_MAX_REVISIONS=0)
         _complete(provider).side_effect = [
             _plan_result(["a"]),
+            _report("Draft report"),
             _critique_result(approved=False, issues=["too short"], revised="Better"),
         ]
-        _complete_with_tools(provider).return_value = _final("Draft report")
+        _complete_with_tools(provider).return_value = _final("Findings")
 
         resp = await _service(provider, settings).run("topic", "req-1")
 
         assert resp.report == "Better"
         assert resp.revisions == 0
         assert _complete_with_tools(provider).await_count == 1
+
+
+class TestRetries:
+    async def test_transient_llm_error_retries_the_node(self, provider):
+        settings = Settings(
+            AGENT_ENABLE_REFLECTION=False,
+            AGENT_NODE_MAX_ATTEMPTS=2,
+            OPENAI_RETRY_BASE_DELAY_SECONDS=0.01,
+        )
+        _complete(provider).side_effect = [
+            LLMTimeoutError("timeout"),
+            _plan_result(["a"]),
+            _report("Report"),
+        ]
+        _complete_with_tools(provider).return_value = _final("Findings")
+
+        with patch("langgraph.pregel._retry.random.uniform", return_value=0):
+            resp = await _service(provider, settings).run("topic", "req-1")
+
+        assert resp.report == "Report"
+        assert _complete(provider).await_count == 3
+
+    async def test_non_transient_error_is_not_retried(self, provider):
+        settings = Settings(AGENT_ENABLE_REFLECTION=False, AGENT_NODE_MAX_ATTEMPTS=3)
+        _complete(provider).side_effect = LLMServiceError("bad request")
+
+        with pytest.raises(LLMServiceError):
+            await _service(provider, settings).run("topic", "req-1")
+
+        assert _complete(provider).await_count == 1
 
 
 class TestHumanApproval:
@@ -190,10 +271,13 @@ class TestHumanApproval:
     async def test_approved_resume_executes_tool_and_completes(self, provider):
         settings = Settings(AGENT_ENABLE_REFLECTION=False)
         service = _service(provider, settings)
-        _complete(provider).side_effect = [_plan_result(["a"])]
+        _complete(provider).side_effect = [
+            _plan_result(["a"]),
+            _report("Report, ticket drafted"),
+        ]
         _complete_with_tools(provider).side_effect = [
             _ticket_step(),
-            _final("Report, ticket drafted"),
+            _final("Findings"),
         ]
 
         paused = await service.run("topic", "req-1")
@@ -209,10 +293,13 @@ class TestHumanApproval:
     async def test_rejected_resume_skips_tool_and_completes(self, provider):
         settings = Settings(AGENT_ENABLE_REFLECTION=False)
         service = _service(provider, settings)
-        _complete(provider).side_effect = [_plan_result(["a"])]
+        _complete(provider).side_effect = [
+            _plan_result(["a"]),
+            _report("Report without ticket"),
+        ]
         _complete_with_tools(provider).side_effect = [
             _ticket_step(),
-            _final("Report without ticket"),
+            _final("Findings"),
         ]
 
         paused = await service.run("topic", "req-1")
@@ -232,8 +319,8 @@ class TestHumanApproval:
     async def test_resume_finished_thread_raises(self, provider):
         settings = Settings(AGENT_ENABLE_REFLECTION=False)
         service = _service(provider, settings)
-        _complete(provider).side_effect = [_plan_result(["a"])]
-        _complete_with_tools(provider).return_value = _final("done")
+        _complete(provider).side_effect = [_plan_result(["a"]), _report("done")]
+        _complete_with_tools(provider).return_value = _final("Findings")
 
         finished = await service.run("topic", "req-1")
 

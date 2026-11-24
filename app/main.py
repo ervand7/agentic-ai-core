@@ -1,7 +1,11 @@
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.domains.ai_tasks.api import error_handlers as ai_tasks_error_handlers
+from app.domains.ai_tasks.api.dependencies import langgraph_lifespan
 from app.domains.ai_tasks.api.router import router as ai_tasks_router
 from app.domains.documents.api import error_handlers as documents_error_handlers
 from app.domains.documents.api.router import router as documents_router
@@ -14,7 +18,14 @@ from app.web.router import router as web_router
 
 setup_logging()
 
-app = FastAPI(title="AI Backend", version="3.1.0", lifespan=lifespan)
+
+@asynccontextmanager
+async def app_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async with lifespan(app), langgraph_lifespan(app):
+        yield
+
+
+app = FastAPI(title="AI Backend", version="3.1.0", lifespan=app_lifespan)
 app.include_router(ai_tasks_router)
 app.include_router(documents_router)
 app.include_router(web_router)

@@ -15,6 +15,7 @@ class Endpoint:
     RESEARCH_AGENT: Final[str] = "research-agent"
     RESEARCH_AGENT_PLAN: Final[str] = "research-agent-plan"
     RESEARCH_AGENT_CRITIC: Final[str] = "research-agent-critic"
+    RESEARCH_AGENT_WRITER: Final[str] = "research-agent-writer"
 
 
 __all__ = ["Endpoint"]
